@@ -197,4 +197,15 @@ describe('Execution Engine', () => {
         expect(existsSync(join(OUT_DIR, 'delete_me_1.json'))).toBe(false)
         expect(existsSync(join(OUT_DIR, 'delete_me_2.json'))).toBe(false)
     })
+
+    test('Glob pattern errors on non-existent matches for copy, move, and edit', async () => {
+        const copyPipeline = pkg().put(copy('non_existent_*.json', 'dest'))
+        await expect(copyPipeline.execute()).rejects.toThrow('Cannot copy non_existent_*.json: No matching source files found.')
+
+        const movePipeline = pkg().put(move('non_existent_*.json', 'dest'))
+        await expect(movePipeline.execute()).rejects.toThrow('Cannot move non_existent_*.json: No matching source files found.')
+
+        const editPipeline = pkg().put(edit('non_existent_*.json').set('a', 1))
+        await expect(editPipeline.execute()).rejects.toThrow('Cannot edit non_existent_*.json: No matching files found in the output directory.')
+    })
 })
