@@ -1,4 +1,4 @@
-name: Publish Package
+name: Publish to NPM
 
 on:
   push:
@@ -9,8 +9,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - run: bun ci
