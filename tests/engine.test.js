@@ -1,85 +1,83 @@
-const { get, create, edit, del, pkg, execute } = require('../index')
-const fs = require('fs')
-const path = require('path')
+import { describe, it, expect, beforeEach, afterAll, mock } from 'bun:test'
+import { get, create, edit, remove as del, pkg } from '../src/index'
+import * as fs from 'fs'
+import * as path from 'path'
+import { Readable } from 'stream'
 
-// Helper to mock or prepare
 const OUT_DIR = path.join(process.cwd(), 'out')
 const CACHE_DIR = path.join(process.cwd(), '.cache')
 const TMP_DIR = path.join(process.cwd(), '.unipatch_tmp')
 
-jest.mock('../src/utils/resolver')
-jest.mock('../src/utils/downloader')
+const originalFetch = global.fetch;
 
-describe('Declarative Firmware Deployment Engine', () => {
+describe('Declarative Firmware Deployment Engine (Legacy JS Test)', () => {
     beforeEach(() => {
-        // Clean state
-        pkg().clear()
         if (fs.existsSync(OUT_DIR))
             fs.rmSync(OUT_DIR, { recursive: true, force: true })
         if (fs.existsSync(TMP_DIR))
             fs.rmSync(TMP_DIR, { recursive: true, force: true })
         if (fs.existsSync(CACHE_DIR))
             fs.rmSync(CACHE_DIR, { recursive: true, force: true })
+
+        global.fetch = mock(async (url) => {
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('Dummy Content'));
+                    controller.close();
+                }
+            });
+            return {
+                ok: true,
+                body: stream,
+                arrayBuffer: async () => new ArrayBuffer(8)
+            };
+        });
     })
 
     afterAll(() => {
-        // Cleanup after all tests
         if (fs.existsSync(OUT_DIR))
             fs.rmSync(OUT_DIR, { recursive: true, force: true })
         if (fs.existsSync(TMP_DIR))
             fs.rmSync(TMP_DIR, { recursive: true, force: true })
         if (fs.existsSync(CACHE_DIR))
             fs.rmSync(CACHE_DIR, { recursive: true, force: true })
+
+        global.fetch = originalFetch;
     })
 
     it('should build the AST correctly', () => {
-        const source = get('user/repo', { type: 'github' })
-            .artifact('test_*.zip')
+        const source = get('github:user/repo', { version: 'latest' })
             .unpack()
             .ignore('*.txt')
 
-        create('config/settings.ini', '', { type: 'ini' })
-        edit('config/settings.ini').type('ini').set('Core', 'Enabled', 'true')
-        del('useless_folder')
-        pkg().put(source)
+        const createNode = create('config/settings.ini', '', { type: 'ini' })
+        const editNode = edit('config/settings.ini').typeFormat('ini').set('Core.Enabled', 'true')
+        const delNode = del('useless_folder')
 
-        const nodes = pkg().getNodes()
+        const pipeline = pkg().put(source, createNode, editNode, delNode)
 
-        expect(nodes.length).toBe(5)
-        expect(nodes[0].nodeType).toBe('Get')
-        expect(nodes[1].nodeType).toBe('Create')
-        expect(nodes[2].nodeType).toBe('Edit')
-        expect(nodes[3].nodeType).toBe('Delete')
-        expect(nodes[4].nodeType).toBe('Put')
+        const nodes = pipeline.steps
 
-        expect(nodes[0].artifactPattern).toBe('test_*.zip')
+        expect(nodes.length).toBe(4)
+        expect(nodes[0].type).toBe('Get')
+        expect(nodes[1].type).toBe('Create')
+        expect(nodes[2].type).toBe('Edit')
+        expect(nodes[3].type).toBe('Remove') // the new name is RemoveNode
+
+        expect(nodes[0].options.version).toBe('latest')
         expect(nodes[0].shouldUnpack).toBe(true)
         expect(nodes[0].ignorePatterns).toContain('*.txt')
-        expect(nodes[2].changes[0].action).toBe('set')
+        expect(nodes[2].modifications[0].key).toBe('Core.Enabled')
     })
 
     it('should download a simple file and put it in out/', async () => {
-        // We will intercept the resolver to avoid real network call for 'http://example.com/dummy.txt'
-        const resolver = require('../src/utils/resolver')
-        const downloader = require('../src/utils/downloader')
-
-        resolver.resolveUrl.mockResolvedValue('http://example.com/dummy.txt')
-        downloader.downloadFile.mockImplementation(async () => {
-            const dummyPath = path.join(CACHE_DIR, 'dummy.txt')
-            if (!fs.existsSync(CACHE_DIR))
-                fs.mkdirSync(CACHE_DIR, { recursive: true })
-            fs.writeFileSync(dummyPath, 'Dummy Content')
-            return dummyPath
-        })
-
-        create('test_file.txt', 'Hello World')
-        create('config.ini', { Core: { Version: '1.0' } }, { type: 'ini' })
-
-        // Use a dummy get just to satisfy put(), we'll mock execute node process for Get
         const source = get('http://example.com/dummy.txt')
-        pkg().put(source)
+        const createNode = create('test_file.txt', 'Hello World')
+        const createIni = create('config.ini', { Core: { Version: '1.0' } }, { type: 'ini' })
 
-        await execute()
+        const pipeline = pkg().put(source, createNode, createIni)
+
+        await pipeline.execute()
 
         expect(fs.existsSync(path.join(OUT_DIR, 'test_file.txt'))).toBe(true)
         expect(
