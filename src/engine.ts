@@ -152,6 +152,37 @@ function applyFilters(
     }
 }
 
+
+/**
+ * Recursively gets all paths in a directory that match a glob pattern.
+ */
+function getMatchedPaths(baseDir: string, pattern: string): string[] {
+    const trimmedPattern = pattern.trim()
+    const matched: string[] = []
+
+    function traverse(currentDir: string) {
+        if (!existsSync(currentDir)) return
+        const entries = readdirSync(currentDir, { withFileTypes: true })
+        for (const entry of entries) {
+            const fullPath = join(currentDir, entry.name)
+            const relativePath = fullPath
+                .replace(baseDir + '/', '')
+                .replace(baseDir + '\\', '')
+
+            if (minimatch(relativePath, trimmedPattern, { matchBase: true })) {
+                matched.push(fullPath)
+            }
+
+            if (entry.isDirectory()) {
+                traverse(fullPath)
+            }
+        }
+    }
+
+    traverse(baseDir)
+    return matched
+}
+
 export async function executeAST(steps: ASTNode[]): Promise<void> {
     // 1. Setup out directory
     if (existsSync(OUT_DIR)) {
@@ -163,6 +194,10 @@ export async function executeAST(steps: ASTNode[]): Promise<void> {
 
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i]
+        if (!step) continue
+
+        console.log(`[Step ${i + 1}/${steps.length}] Executing ${step.type}...`)
+
         const stepTmpDir = join(TMP_DIR_BASE, `${timestamp}_step_${i}`)
         mkdirSync(stepTmpDir, { recursive: true })
 
@@ -280,117 +315,153 @@ async function executeCreate(
 }
 
 async function executeEdit(step: EditNode, stepTmpDir: string): Promise<void> {
-    const outFilePath = join(OUT_DIR, step.path)
-    const tmpFilePath = join(stepTmpDir, step.path)
+    const pathsToEdit = getMatchedPaths(OUT_DIR, step.path)
 
-    if (!existsSync(outFilePath)) {
+    if (pathsToEdit.length === 0) {
         throw new Error(
-            `Cannot edit file ${step.path}: File does not exist in the output directory.`,
+            `Cannot edit ${step.path}: No matching files found in the output directory.`,
         )
     }
 
-    // Move file from out to tmp
-    const tmpDir = dirname(tmpFilePath)
-    if (!existsSync(tmpDir)) {
-        mkdirSync(tmpDir, { recursive: true })
+    for (const outFilePath of pathsToEdit) {
+        if (!statSync(outFilePath).isFile()) continue
+
+        const relativePath = outFilePath.replace(OUT_DIR + '/', '').replace(OUT_DIR + '\\', '')
+        const tmpFilePath = join(stepTmpDir, relativePath)
+
+        // Move file from out to tmp
+        const tmpDir = dirname(tmpFilePath)
+        if (!existsSync(tmpDir)) {
+            mkdirSync(tmpDir, { recursive: true })
+        }
+        renameSync(outFilePath, tmpFilePath)
+
+        // Read, edit, and write
+        const content = readFileSync(tmpFilePath, 'utf-8')
+
+        // Infer format if not provided
+        let format = step.format
+        if (!format) {
+            if (relativePath.endsWith('.json')) format = 'json'
+            else if (relativePath.endsWith('.yaml') || relativePath.endsWith('.yml'))
+                format = 'yaml'
+            else if (relativePath.endsWith('.ini')) format = 'ini'
+            else
+                throw new Error(
+                    `Cannot infer file format for ${relativePath}. Please specify format using .typeFormat().`,
+                )
+        }
+
+        const modifiedContent = modifyContent(
+            content,
+            format,
+            step.modifications,
+            step.shouldClearComments,
+        )
+        writeFileSync(tmpFilePath, modifiedContent, 'utf-8')
     }
-    renameSync(outFilePath, tmpFilePath)
-
-    // Read, edit, and write
-    const content = readFileSync(tmpFilePath, 'utf-8')
-
-    // Infer format if not provided
-    let format = step.format
-    if (!format) {
-        if (step.path.endsWith('.json')) format = 'json'
-        else if (step.path.endsWith('.yaml') || step.path.endsWith('.yml'))
-            format = 'yaml'
-        else if (step.path.endsWith('.ini')) format = 'ini'
-        else
-            throw new Error(
-                `Cannot infer file format for ${step.path}. Please specify format using .typeFormat().`,
-            )
-    }
-
-    const modifiedContent = modifyContent(
-        content,
-        format,
-        step.modifications,
-        step.shouldClearComments,
-    )
-    writeFileSync(tmpFilePath, modifiedContent, 'utf-8')
 }
 
 async function executeRemove(
     step: RemoveNode,
     stepTmpDir: string,
 ): Promise<void> {
-    const outFilePath = join(OUT_DIR, step.path)
-    if (existsSync(outFilePath)) {
-        rmSync(outFilePath, { recursive: true, force: true })
+    const pathsToRemove = getMatchedPaths(OUT_DIR, step.path)
+
+    // Sort descending by length to remove deepest paths first, preventing parent deletion before children
+    pathsToRemove.sort((a, b) => b.length - a.length)
+
+    for (const outFilePath of pathsToRemove) {
+        if (existsSync(outFilePath)) {
+            rmSync(outFilePath, { recursive: true, force: true })
+        }
     }
 }
 
 async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
-    const srcPath = join(OUT_DIR, step.src)
-    const destTmpPath = join(stepTmpDir, step.dest)
+    const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
-    if (!existsSync(srcPath)) {
-        throw new Error(`Cannot copy ${step.src}: Source does not exist.`)
+    if (matchedPaths.length === 0) {
+        throw new Error(`Cannot copy ${step.src}: No matching source files found.`)
     }
 
-    const stat = statSync(srcPath)
-    if (stat.isDirectory()) {
-        copyDirRecursive(srcPath, destTmpPath)
-        // Apply filters to copied directory
-        if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
-            applyFilters(
-                destTmpPath,
-                destTmpPath,
-                step.ignorePatterns,
-                step.onlyPatterns,
-            )
+    const isMultiMatch = matchedPaths.length > 1 || /[?*{}\[\]]/.test(step.src)
+
+    for (const srcPath of matchedPaths) {
+        let destTmpPath = join(stepTmpDir, step.dest)
+
+        if (isMultiMatch) {
+            // For multiple files, dest acts as a directory
+            const baseName = require('path').basename(srcPath)
+            destTmpPath = join(destTmpPath, baseName)
         }
-    } else {
-        const destDir = dirname(destTmpPath)
-        if (!existsSync(destDir)) {
-            mkdirSync(destDir, { recursive: true })
+
+        const stat = statSync(srcPath)
+        if (stat.isDirectory()) {
+            copyDirRecursive(srcPath, destTmpPath)
+            // Apply filters to copied directory
+            if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
+                applyFilters(
+                    destTmpPath,
+                    destTmpPath,
+                    step.ignorePatterns,
+                    step.onlyPatterns,
+                )
+            }
+        } else {
+            const destDir = dirname(destTmpPath)
+            if (!existsSync(destDir)) {
+                mkdirSync(destDir, { recursive: true })
+            }
+            copyFileSync(srcPath, destTmpPath)
         }
-        copyFileSync(srcPath, destTmpPath)
-        // Note: For a single file, filtering during copy is technically possible,
-        // but typically ignore/only apply to directories.
     }
 }
 
 async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
-    const srcPath = join(OUT_DIR, step.src)
-    const destTmpPath = join(stepTmpDir, step.dest)
+    const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
-    if (!existsSync(srcPath)) {
-        throw new Error(`Cannot move ${step.src}: Source does not exist.`)
+    if (matchedPaths.length === 0) {
+        throw new Error(`Cannot move ${step.src}: No matching source files found.`)
     }
 
-    const stat = statSync(srcPath)
-    if (stat.isDirectory()) {
-        // Move essentially copies it to stepTmpDir then we delete the original.
-        // It gets placed in OUT_DIR later by the moveDirContents step.
-        copyDirRecursive(srcPath, destTmpPath)
-        rmSync(srcPath, { recursive: true, force: true })
+    const isMultiMatch = matchedPaths.length > 1 || /[?*{}\[\]]/.test(step.src)
 
-        // Apply filters to moved directory
-        if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
-            applyFilters(
-                destTmpPath,
-                destTmpPath,
-                step.ignorePatterns,
-                step.onlyPatterns,
-            )
+    // Sort descending by length for moves? Probably fine as is since we are just moving to tmpDir.
+    // However, if a directory is moved, we should avoid moving its children individually if they are also matched.
+    // For simplicity, just iterate.
+
+    for (const srcPath of matchedPaths) {
+        if (!existsSync(srcPath)) continue // Might have been moved as part of a parent directory
+
+        let destTmpPath = join(stepTmpDir, step.dest)
+
+        if (isMultiMatch) {
+            // For multiple files, dest acts as a directory
+            const baseName = require('path').basename(srcPath)
+            destTmpPath = join(destTmpPath, baseName)
         }
-    } else {
-        const destDir = dirname(destTmpPath)
-        if (!existsSync(destDir)) {
-            mkdirSync(destDir, { recursive: true })
+
+        const stat = statSync(srcPath)
+        if (stat.isDirectory()) {
+            copyDirRecursive(srcPath, destTmpPath)
+            rmSync(srcPath, { recursive: true, force: true })
+
+            // Apply filters to moved directory
+            if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
+                applyFilters(
+                    destTmpPath,
+                    destTmpPath,
+                    step.ignorePatterns,
+                    step.onlyPatterns,
+                )
+            }
+        } else {
+            const destDir = dirname(destTmpPath)
+            if (!existsSync(destDir)) {
+                mkdirSync(destDir, { recursive: true })
+            }
+            renameSync(srcPath, destTmpPath)
         }
-        renameSync(srcPath, destTmpPath)
     }
 }
