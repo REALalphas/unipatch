@@ -1,0 +1,18 @@
+{
+  "name": "declarative-firmware-deployment",
+  "version": "1.0.0",
+  "description": "Declarative Firmware Deployment Engine",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "axios": "^1.6.8",
+    "ini": "^4.1.1",
+    "minimatch": "^9.0.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
