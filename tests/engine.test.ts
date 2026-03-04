@@ -162,4 +162,39 @@ describe('Execution Engine', () => {
         expect(existsSync(join(OUT_DIR, 'archive', 'index.js'))).toBe(false) // Filtered out by only
         expect(existsSync(join(OUT_DIR, 'archive', 'test.spec.js'))).toBe(false) // Filtered out by only
     })
+
+    test('Glob pattern support for file operations', async () => {
+        const pipeline = pkg().put(
+            create('file1.json', { a: 1 }),
+            create('file2.json', { a: 2 }),
+            create('delete_me_1.json', { a: 3 }),
+            create('delete_me_2.json', { a: 4 }),
+            create('other.txt', 'hello'),
+            edit('*.json').set('b', 3),
+            copy('file*.json', 'copied_jsons'),
+            move('other.txt', 'moved_other.txt'),
+            remove('delete_me_*.json')
+        )
+
+        await pipeline.execute()
+
+        // 1. Verify edit on multiple files
+        // Wait, files are removed by the last step, let's copy them first
+        // Actually, we copy them, so copied_jsons/file1.json should have the edit.
+        const copiedFile1 = readFileSync(join(OUT_DIR, 'copied_jsons', 'file1.json'), 'utf-8')
+        const parsed = JSON.parse(copiedFile1)
+        expect(parsed.a).toBe(1)
+        expect(parsed.b).toBe(3) // Edit applied
+
+        // 2. Verify copy with multiple matches creates a directory
+        expect(existsSync(join(OUT_DIR, 'copied_jsons', 'file2.json'))).toBe(true)
+
+        // 3. Verify move
+        expect(existsSync(join(OUT_DIR, 'moved_other.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'other.txt'))).toBe(false)
+
+        // 4. Verify remove with glob
+        expect(existsSync(join(OUT_DIR, 'delete_me_1.json'))).toBe(false)
+        expect(existsSync(join(OUT_DIR, 'delete_me_2.json'))).toBe(false)
+    })
 })
