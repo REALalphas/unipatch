@@ -2,7 +2,21 @@
     "name": "unipatch",
     "module": "src/index.ts",
     "type": "module",
-    "private": true,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "license": "AGPL-3.0-or-later",
+    "scripts": {
+        "build": "rm -rf ./dist && bun build ./src/index.ts --outdir ./dist --target node && tsc -p tsconfig.build.json",
+        "prepublishOnly": "npm run build",
+        "test": "bun test"
+    },
     "devDependencies": {
         "@types/adm-zip": "^0.5.7",
         "@types/bun": "latest",
