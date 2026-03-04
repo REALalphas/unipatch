@@ -1,16 +1,16 @@
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const { getMD5, getBufferMD5 } = require('./hash');
+const axios = require('axios')
+const fs = require('fs')
+const path = require('path')
+const { getMD5, getBufferMD5 } = require('./hash')
 
-const CACHE_DIR = path.join(process.cwd(), '.cache');
+const CACHE_DIR = path.join(process.cwd(), '.cache')
 
 /**
  * Ensures the cache directory exists.
  */
 function ensureCacheDir() {
     if (!fs.existsSync(CACHE_DIR)) {
-        fs.mkdirSync(CACHE_DIR, { recursive: true });
+        fs.mkdirSync(CACHE_DIR, { recursive: true })
     }
 }
 
@@ -22,26 +22,26 @@ function ensureCacheDir() {
  * @returns {Promise<string>} The path to the cached file.
  */
 async function downloadFile(url, retries = 3, delay = 5000) {
-    ensureCacheDir();
-    const urlHash = getMD5(url);
+    ensureCacheDir()
+    const urlHash = getMD5(url)
     // Extract extension from URL, fallback to .bin
-    const urlExtMatch = url.match(/\.([a-z0-9]+)(?:[\?#]|$)/i);
-    const ext = urlExtMatch ? `.${urlExtMatch[1]}` : '.bin';
-    const cachedFilePath = path.join(CACHE_DIR, `${urlHash}${ext}`);
-    const hashFilePath = path.join(CACHE_DIR, `${urlHash}.hash`);
+    const urlExtMatch = url.match(/\.([a-z0-9]+)(?:[\?#]|$)/i)
+    const ext = urlExtMatch ? `.${urlExtMatch[1]}` : '.bin'
+    const cachedFilePath = path.join(CACHE_DIR, `${urlHash}${ext}`)
+    const hashFilePath = path.join(CACHE_DIR, `${urlHash}.hash`)
 
     // Check cache
     if (fs.existsSync(cachedFilePath) && fs.existsSync(hashFilePath)) {
-        const expectedHash = fs.readFileSync(hashFilePath, 'utf8').trim();
-        const fileBuffer = fs.readFileSync(cachedFilePath);
-        const actualHash = getBufferMD5(fileBuffer);
+        const expectedHash = fs.readFileSync(hashFilePath, 'utf8').trim()
+        const fileBuffer = fs.readFileSync(cachedFilePath)
+        const actualHash = getBufferMD5(fileBuffer)
 
         if (expectedHash === actualHash) {
-            return cachedFilePath; // Cache hit
+            return cachedFilePath // Cache hit
         } else {
             // Invalid cache, remove
-            fs.unlinkSync(cachedFilePath);
-            fs.unlinkSync(hashFilePath);
+            fs.unlinkSync(cachedFilePath)
+            fs.unlinkSync(hashFilePath)
         }
     }
 
@@ -51,29 +51,36 @@ async function downloadFile(url, retries = 3, delay = 5000) {
             const response = await axios({
                 method: 'get',
                 url: url,
-                responseType: 'arraybuffer'
-            });
+                responseType: 'arraybuffer',
+            })
 
-            const fileBuffer = Buffer.from(response.data);
-            const fileHash = getBufferMD5(fileBuffer);
+            const fileBuffer = Buffer.from(response.data)
+            const fileHash = getBufferMD5(fileBuffer)
 
-            fs.writeFileSync(cachedFilePath, fileBuffer);
-            fs.writeFileSync(hashFilePath, fileHash);
+            fs.writeFileSync(cachedFilePath, fileBuffer)
+            fs.writeFileSync(hashFilePath, fileHash)
 
-            return cachedFilePath;
+            return cachedFilePath
         } catch (error) {
             // If it's the last attempt or it's a critical error (like 404), throw
-            if (attempt === retries || (error.response && error.response.status === 404)) {
-                throw new Error(`Critical Error: Failed to download ${url} - ${error.message}`);
+            if (
+                attempt === retries ||
+                (error.response && error.response.status === 404)
+            ) {
+                throw new Error(
+                    `Critical Error: Failed to download ${url} - ${error.message}`,
+                )
             }
 
-            console.warn(`[Warning] Download failed for ${url} (Attempt ${attempt}/${retries}). Retrying in ${delay / 1000}s...`);
-            await new Promise(res => setTimeout(res, delay));
+            console.warn(
+                `[Warning] Download failed for ${url} (Attempt ${attempt}/${retries}). Retrying in ${delay / 1000}s...`,
+            )
+            await new Promise((res) => setTimeout(res, delay))
         }
     }
 }
 
 module.exports = {
     downloadFile,
-    CACHE_DIR
-};
+    CACHE_DIR,
+}

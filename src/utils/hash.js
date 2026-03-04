@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const crypto = require('crypto')
 
 /**
  * Calculates the MD5 hash of a given string (e.g., URL).
@@ -6,7 +6,7 @@ const crypto = require('crypto');
  * @returns {string}
  */
 function getMD5(data) {
-    return crypto.createHash('md5').update(data).digest('hex');
+    return crypto.createHash('md5').update(data).digest('hex')
 }
 
 /**
@@ -15,10 +15,10 @@ function getMD5(data) {
  * @returns {string}
  */
 function getBufferMD5(buffer) {
-    return crypto.createHash('md5').update(buffer).digest('hex');
+    return crypto.createHash('md5').update(buffer).digest('hex')
 }
 
 module.exports = {
     getMD5,
-    getBufferMD5
-};
+    getBufferMD5,
+}

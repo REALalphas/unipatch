@@ -3,7 +3,7 @@
  */
 class ASTNode {
     constructor(nodeType) {
-        this.nodeType = nodeType;
+        this.nodeType = nodeType
     }
 }
 
@@ -12,17 +12,17 @@ class ASTNode {
  */
 class GetNode extends ASTNode {
     constructor(source, options = {}) {
-        super('Get');
-        this.source = source;
-        this.options = options;
+        super('Get')
+        this.source = source
+        this.options = options
 
-        this.artifactPattern = null;
-        this.shouldUnpack = false;
-        this.unpackFormat = null;
+        this.artifactPattern = null
+        this.shouldUnpack = false
+        this.unpackFormat = null
 
         // These will store minimatch patterns
-        this.ignorePatterns = [];
-        this.onlyPatterns = [];
+        this.ignorePatterns = []
+        this.onlyPatterns = []
     }
 
     /**
@@ -31,8 +31,8 @@ class GetNode extends ASTNode {
      * @returns {GetNode}
      */
     artifact(pattern) {
-        this.artifactPattern = pattern;
-        return this;
+        this.artifactPattern = pattern
+        return this
     }
 
     /**
@@ -41,9 +41,9 @@ class GetNode extends ASTNode {
      * @returns {GetNode}
      */
     unpack(format = null) {
-        this.shouldUnpack = true;
-        this.unpackFormat = format;
-        return this;
+        this.shouldUnpack = true
+        this.unpackFormat = format
+        return this
     }
 
     /**
@@ -52,8 +52,8 @@ class GetNode extends ASTNode {
      * @returns {GetNode}
      */
     ignore(pattern) {
-        this.ignorePatterns.push(pattern);
-        return this;
+        this.ignorePatterns.push(pattern)
+        return this
     }
 
     /**
@@ -62,8 +62,8 @@ class GetNode extends ASTNode {
      * @returns {GetNode}
      */
     only(pattern) {
-        this.onlyPatterns.push(pattern);
-        return this;
+        this.onlyPatterns.push(pattern)
+        return this
     }
 }
 
@@ -72,10 +72,10 @@ class GetNode extends ASTNode {
  */
 class CreateNode extends ASTNode {
     constructor(targetPath, contents = null, options = {}) {
-        super('Create');
-        this.targetPath = targetPath;
-        this.contents = contents; // null means folder
-        this.options = options; // e.g., { type: 'ini' }
+        super('Create')
+        this.targetPath = targetPath
+        this.contents = contents // null means folder
+        this.options = options // e.g., { type: 'ini' }
     }
 }
 
@@ -84,10 +84,10 @@ class CreateNode extends ASTNode {
  */
 class EditNode extends ASTNode {
     constructor(targetPath) {
-        super('Edit');
-        this.targetPath = targetPath;
-        this.editType = 'raw';
-        this.changes = [];
+        super('Edit')
+        this.targetPath = targetPath
+        this.editType = 'raw'
+        this.changes = []
     }
 
     /**
@@ -96,8 +96,8 @@ class EditNode extends ASTNode {
      * @returns {EditNode}
      */
     type(typeVal) {
-        this.editType = typeVal;
-        return this;
+        this.editType = typeVal
+        return this
     }
 
     /**
@@ -107,8 +107,8 @@ class EditNode extends ASTNode {
      * @returns {EditNode}
      */
     set(...args) {
-        this.changes.push({ action: 'set', args });
-        return this;
+        this.changes.push({ action: 'set', args })
+        return this
     }
 }
 
@@ -117,8 +117,8 @@ class EditNode extends ASTNode {
  */
 class DeleteNode extends ASTNode {
     constructor(targetPath) {
-        super('Delete');
-        this.targetPath = targetPath;
+        super('Delete')
+        this.targetPath = targetPath
     }
 }
 
@@ -127,8 +127,8 @@ class DeleteNode extends ASTNode {
  */
 class PutNode extends ASTNode {
     constructor(sourceNode) {
-        super('Put');
-        this.sourceNode = sourceNode;
+        super('Put')
+        this.sourceNode = sourceNode
     }
 }
 
@@ -138,5 +138,5 @@ module.exports = {
     CreateNode,
     EditNode,
     DeleteNode,
-    PutNode
-};
+    PutNode,
+}

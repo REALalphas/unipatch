@@ -1,8 +1,14 @@
-const { GetNode, CreateNode, EditNode, DeleteNode, PutNode } = require('./nodes');
+const {
+    GetNode,
+    CreateNode,
+    EditNode,
+    DeleteNode,
+    PutNode,
+} = require('./nodes')
 
 class ASTBuilder {
     constructor() {
-        this.nodes = [];
+        this.nodes = []
     }
 
     /**
@@ -12,9 +18,9 @@ class ASTBuilder {
      * @returns {GetNode}
      */
     get(url, options = {}) {
-        const node = new GetNode(url, options);
-        this.nodes.push(node);
-        return node;
+        const node = new GetNode(url, options)
+        this.nodes.push(node)
+        return node
     }
 
     /**
@@ -25,9 +31,9 @@ class ASTBuilder {
      * @returns {CreateNode}
      */
     create(path, contents = null, options = {}) {
-        const node = new CreateNode(path, contents, options);
-        this.nodes.push(node);
-        return node;
+        const node = new CreateNode(path, contents, options)
+        this.nodes.push(node)
+        return node
     }
 
     /**
@@ -36,9 +42,9 @@ class ASTBuilder {
      * @returns {EditNode}
      */
     edit(targetPath) {
-        const node = new EditNode(targetPath);
-        this.nodes.push(node);
-        return node;
+        const node = new EditNode(targetPath)
+        this.nodes.push(node)
+        return node
     }
 
     /**
@@ -47,9 +53,9 @@ class ASTBuilder {
      * @returns {DeleteNode}
      */
     delete(path) {
-        const node = new DeleteNode(path);
-        this.nodes.push(node);
-        return node;
+        const node = new DeleteNode(path)
+        this.nodes.push(node)
+        return node
     }
 
     /**
@@ -59,11 +65,13 @@ class ASTBuilder {
      */
     put(sourceNode) {
         if (!(sourceNode instanceof GetNode)) {
-            throw new Error(`Critical Error: package().put() requires a valid source object obtained from get().`);
+            throw new Error(
+                `Critical Error: package().put() requires a valid source object obtained from get().`,
+            )
         }
-        const node = new PutNode(sourceNode);
-        this.nodes.push(node);
-        return node;
+        const node = new PutNode(sourceNode)
+        this.nodes.push(node)
+        return node
     }
 
     /**
@@ -71,21 +79,21 @@ class ASTBuilder {
      * @returns {Array<any>}
      */
     getNodes() {
-        return this.nodes;
+        return this.nodes
     }
 
     /**
      * Clear the AST
      */
     clear() {
-        this.nodes = [];
+        this.nodes = []
     }
 }
 
 // Global Singleton for the AST builder
-const globalBuilder = new ASTBuilder();
+const globalBuilder = new ASTBuilder()
 
 module.exports = {
     ASTBuilder,
-    globalBuilder
-};
+    globalBuilder,
+}

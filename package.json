@@ -1,18 +1,26 @@
 {
-  "name": "declarative-firmware-deployment",
-  "version": "1.0.0",
-  "description": "Declarative Firmware Deployment Engine",
-  "main": "index.js",
-  "scripts": {
-    "test": "jest"
-  },
-  "dependencies": {
-    "adm-zip": "^0.5.10",
-    "axios": "^1.6.8",
-    "ini": "^4.1.1",
-    "minimatch": "^9.0.3"
-  },
-  "devDependencies": {
-    "jest": "^29.7.0"
-  }
+    "name": "unipatch",
+    "module": "src/index.ts",
+    "type": "module",
+    "private": true,
+    "devDependencies": {
+        "@types/adm-zip": "^0.5.7",
+        "@types/bun": "latest",
+        "@types/crypto-js": "^4.2.2",
+        "@types/ini": "^4.1.1",
+        "@types/minimatch": "^6.0.0",
+        "@types/tar": "^7.0.87"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "adm-zip": "^0.5.16",
+        "crypto-js": "^4.2.0",
+        "ini": "^6.0.0",
+        "json5": "^2.2.3",
+        "minimatch": "^10.2.4",
+        "tar": "^7.5.9",
+        "yaml": "^2.8.2"
+    }
 }
