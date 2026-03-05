@@ -95,6 +95,28 @@ function copyDirRecursive(src: string, dest: string): void {
 }
 
 /**
+ * Recursively checks if any files from `src` already exist in `dest`.
+ * Returns an array of paths relative to `src` that exist in `dest`.
+ */
+function checkConflicts(src: string, dest: string): string[] {
+    const conflicts: string[] = []
+    if (!existsSync(src) || !existsSync(dest)) return conflicts
+
+    const entries = readdirSync(src, { withFileTypes: true })
+    for (const entry of entries) {
+        const srcPath = join(src, entry.name)
+        const destPath = join(dest, entry.name)
+
+        if (entry.isDirectory()) {
+            conflicts.push(...checkConflicts(srcPath, destPath))
+        } else if (existsSync(destPath)) {
+            conflicts.push(destPath)
+        }
+    }
+    return conflicts
+}
+
+/**
  * Recursively moves all contents of a directory into another directory, merging directories instead of replacing them.
  */
 function moveDirContents(src: string, dest: string): void {
@@ -236,6 +258,16 @@ export async function executeAST(steps: ASTNode[]): Promise<void> {
                 await executeMove(step, stepTmpDir)
             } else if (step instanceof RenameNode) {
                 await executeRename(step, stepTmpDir)
+            }
+
+            if (step instanceof GetNode && step.shouldUnpack) {
+                const overwrite = step.unpackOptions?.overwrite !== false
+                if (!overwrite) {
+                    const conflicts = checkConflicts(stepTmpDir, OUT_DIR)
+                    if (conflicts.length > 0) {
+                        throw new Error(`Cannot unpack because the following files already exist and overwrite is false: ${conflicts.join(', ')}`)
+                    }
+                }
             }
 
             // Move contents from stepTmpDir to OUT_DIR (overwriting)
