@@ -10,7 +10,7 @@ import {
     copyFileSync,
     createWriteStream,
 } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve, relative } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
@@ -37,6 +37,23 @@ import { modifyContent, parsers } from './parsers'
 
 export const OUT_DIR = 'out'
 export const TMP_DIR_BASE = join(OUT_DIR, '.unipatch_tmp')
+
+/**
+ * Resolves a path and ensures it is within the specified base directory.
+ * @throws {Error} if the resolved path is outside the base directory.
+ */
+function resolveSafePath(baseDir: string, untrustedPath: string): string {
+    const resolvedBase = resolve(baseDir)
+    const resolvedPath = resolve(baseDir, untrustedPath)
+    const rel = relative(resolvedBase, resolvedPath)
+
+    if (rel.startsWith('..') || resolve(rel) === resolve('..')) {
+        throw new Error(
+            `Security Error: Path traversal detected. Target path "${untrustedPath}" is outside base directory "${baseDir}".`,
+        )
+    }
+    return resolvedPath
+}
 
 /**
  * Downloads a file from a URL to a specified destination via streaming to avoid OOM for large files.
@@ -257,7 +274,7 @@ async function executeCreate(
 ): Promise<void> {
     // We are creating a file conceptually inside OUT_DIR,
     // but practically we create it in stepTmpDir so it gets moved over.
-    const destPath = join(stepTmpDir, step.path)
+    const destPath = resolveSafePath(stepTmpDir, step.path)
     const destDir = dirname(destPath)
     if (!existsSync(destDir)) {
         mkdirSync(destDir, { recursive: true })
@@ -280,8 +297,8 @@ async function executeCreate(
 }
 
 async function executeEdit(step: EditNode, stepTmpDir: string): Promise<void> {
-    const outFilePath = join(OUT_DIR, step.path)
-    const tmpFilePath = join(stepTmpDir, step.path)
+    const outFilePath = resolveSafePath(OUT_DIR, step.path)
+    const tmpFilePath = resolveSafePath(stepTmpDir, step.path)
 
     if (!existsSync(outFilePath)) {
         throw new Error(
@@ -325,15 +342,15 @@ async function executeRemove(
     step: RemoveNode,
     stepTmpDir: string,
 ): Promise<void> {
-    const outFilePath = join(OUT_DIR, step.path)
+    const outFilePath = resolveSafePath(OUT_DIR, step.path)
     if (existsSync(outFilePath)) {
         rmSync(outFilePath, { recursive: true, force: true })
     }
 }
 
 async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
-    const srcPath = join(OUT_DIR, step.src)
-    const destTmpPath = join(stepTmpDir, step.dest)
+    const srcPath = resolveSafePath(OUT_DIR, step.src)
+    const destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
     if (!existsSync(srcPath)) {
         throw new Error(`Cannot copy ${step.src}: Source does not exist.`)
@@ -363,8 +380,8 @@ async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
 }
 
 async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
-    const srcPath = join(OUT_DIR, step.src)
-    const destTmpPath = join(stepTmpDir, step.dest)
+    const srcPath = resolveSafePath(OUT_DIR, step.src)
+    const destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
     if (!existsSync(srcPath)) {
         throw new Error(`Cannot move ${step.src}: Source does not exist.`)
