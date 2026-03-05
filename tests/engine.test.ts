@@ -15,6 +15,8 @@ import { clearAllCache } from '../src/cache'
 
 const MOCK_ZIP_PATH = join(__dirname, 'mock.zip')
 const MOCK_MALICIOUS_ZIP_PATH = join(__dirname, 'malicious.zip')
+const LOCAL_MOCK_DIR = join(__dirname, 'local_mock_dir')
+const LOCAL_MOCK_FILE = join(__dirname, 'local_mock.txt')
 
 function createMockZip() {
     const zip = new AdmZip()
@@ -35,6 +37,12 @@ describe('Execution Engine', () => {
         clearAllCache()
         createMockZip()
 
+        // Create local files for local get tests
+        mkdirSync(LOCAL_MOCK_DIR, { recursive: true })
+        writeFileSync(join(LOCAL_MOCK_DIR, 'file1.txt'), 'file1 content')
+        writeFileSync(join(LOCAL_MOCK_DIR, 'file2.txt'), 'file2 content')
+        writeFileSync(LOCAL_MOCK_FILE, 'local file content')
+
         // Mock fetch to simulate downloading the local zip
         // Fix diagnostics:
         // 1. Cast global.fetch to 'any' to resolve 'Property 'preconnect' is missing' error.
@@ -52,6 +60,8 @@ describe('Execution Engine', () => {
         clearAllCache()
         if (existsSync(MOCK_ZIP_PATH)) rmSync(MOCK_ZIP_PATH)
         if (existsSync(MOCK_MALICIOUS_ZIP_PATH)) rmSync(MOCK_MALICIOUS_ZIP_PATH)
+        if (existsSync(LOCAL_MOCK_DIR)) rmSync(LOCAL_MOCK_DIR, { recursive: true, force: true })
+        if (existsSync(LOCAL_MOCK_FILE)) rmSync(LOCAL_MOCK_FILE)
         if (existsSync(OUT_DIR))
             rmSync(OUT_DIR, { recursive: true, force: true })
     })
@@ -356,5 +366,63 @@ describe('Execution Engine', () => {
         } finally {
             global.fetch = originalFetch
         }
+    })
+
+    test('Local Get: File and Directory Copying', async () => {
+        const pipeline = pkg().put(
+            get(`local:${LOCAL_MOCK_FILE}`),
+            get(`local:${LOCAL_MOCK_DIR}`)
+        )
+
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'local_mock.txt'))).toBe(true)
+        expect(readFileSync(join(OUT_DIR, 'local_mock.txt'), 'utf-8')).toBe('local file content')
+
+        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file2.txt'))).toBe(true)
+        expect(readFileSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'), 'utf-8')).toBe('file1 content')
+    })
+
+    test('Local Get: Unpacking Directory', async () => {
+        const pipeline = pkg().put(
+            get(`local:${LOCAL_MOCK_DIR}`).unpack()
+        )
+
+        await pipeline.execute()
+
+        // Unpacking a directory should copy its contents directly into OUT_DIR
+        expect(existsSync(join(OUT_DIR, 'file1.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'file2.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'local_mock_dir'))).toBe(false)
+        expect(readFileSync(join(OUT_DIR, 'file1.txt'), 'utf-8')).toBe('file1 content')
+    })
+
+    test('Local Get: Unpacking and Filtering Directory', async () => {
+        const pipeline = pkg().put(
+            get(`local:${LOCAL_MOCK_DIR}`).unpack().ignore('file2.txt')
+        )
+
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'file1.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'file2.txt'))).toBe(false) // Ignored
+    })
+
+    test('Local Get: Non-existent path', async () => {
+        const pipeline = pkg().put(
+            get('local:/path/that/does/not/exist.txt')
+        )
+        await expect(pipeline.execute()).rejects.toThrow('Local path not found')
+    })
+
+    test('Local Get: Unpacking a local zip file', async () => {
+        const pipeline = pkg().put(
+            get(`local:${MOCK_ZIP_PATH}`).unpack()
+        )
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'data.txt'))).toBe(true)
     })
 })

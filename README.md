@@ -8,7 +8,7 @@ The system uses an Abstract Syntax Tree (AST) combined with a chainable Domain S
 
 1. **AST & DSL (`pkg()`)**: The entry point for defining your deployment pipeline.
 2. **Operations**:
-   - `get(url)`: Fetches an artifact from a URL, GitHub, or GitLab repository.
+   - `get(url)`: Fetches an artifact from a URL, GitHub, GitLab repository, or local file system (`local:/path/to/file_or_dir`).
    - `create(path, content, options)`: Generates a new file (JSON, INI, YAML, or plain text).
    - `edit(path)`: Modifies an existing configuration file without destroying its original structure.
    - `remove(path)` (or `del(path)`): Deletes a file or directory from the output structure.
@@ -125,3 +125,17 @@ When using `get('github:user/repo')` or `get('gitlab:user/repo')`, you can pass 
 - `allowPreRelease`: Boolean flag to allow pre-releases (default: `false`).
 - `assetPattern`: A glob pattern to select a specific artifact from the release (e.g., `'*windows*.zip'`).
 - `headers`: Custom HTTP headers for authentication if needed.
+
+### Local Files
+When using `get('local:/path/to/file_or_dir')`, you can fetch artifacts from the local file system.
+
+```typescript
+// Copy a local zip and unpack it
+get('local:./assets/mod.zip').unpack()
+
+// Copy a local directory into the output folder
+get('local:./custom_folder')
+
+// Unpack a local directory directly into the output root (similar to copying its contents)
+get('local:./custom_folder').unpack()
+```
