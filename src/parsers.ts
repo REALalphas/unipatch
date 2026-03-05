@@ -158,6 +158,13 @@ export function setNestedValue(obj: any, path: string, value: any): void {
                 'Path contains an empty or invalid intermediate key segment',
             )
         }
+        if (
+            key === '__proto__' ||
+            key === 'constructor' ||
+            key === 'prototype'
+        ) {
+            throw new Error(`Security Error: Forbidden key segment "${key}"`)
+        }
         if (typeof current[key] !== 'object' || current[key] === null) {
             current[key] = {}
         }
@@ -168,6 +175,14 @@ export function setNestedValue(obj: any, path: string, value: any): void {
 
     if (lastKey === '') {
         throw new Error('Final key in path cannot be an empty string')
+    }
+
+    if (
+        lastKey === '__proto__' ||
+        lastKey === 'constructor' ||
+        lastKey === 'prototype'
+    ) {
+        throw new Error(`Security Error: Forbidden key segment "${lastKey}"`)
     }
 
     current[lastKey] = value
