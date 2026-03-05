@@ -13,6 +13,7 @@ import { OUT_DIR, TMP_DIR_BASE } from '../src/engine'
 import { clearAllCache } from '../src/cache'
 
 const MOCK_ZIP_PATH = join(__dirname, 'mock.zip')
+const MOCK_MALICIOUS_ZIP_PATH = join(__dirname, 'malicious.zip')
 
 function createMockZip() {
     const zip = new AdmZip()
@@ -20,6 +21,12 @@ function createMockZip() {
     zip.addFile('data.txt', Buffer.from('hello world', 'utf8'))
     zip.addFile('ignore_me.txt', Buffer.from('ignore', 'utf8'))
     zip.writeZip(MOCK_ZIP_PATH)
+
+    const maliciousZip = new AdmZip()
+    // By default AdmZip cleans the path. So we add it with a safe name, then modify the entry directly.
+    maliciousZip.addFile('hacked', Buffer.from('hacked', 'utf8'))
+    maliciousZip.getEntries()[0]!.entryName = '../../etc/passwd'
+    maliciousZip.writeZip(MOCK_MALICIOUS_ZIP_PATH)
 }
 
 describe('Execution Engine', () => {
@@ -43,6 +50,7 @@ describe('Execution Engine', () => {
     afterAll(() => {
         clearAllCache()
         if (existsSync(MOCK_ZIP_PATH)) rmSync(MOCK_ZIP_PATH)
+        if (existsSync(MOCK_MALICIOUS_ZIP_PATH)) rmSync(MOCK_MALICIOUS_ZIP_PATH)
         if (existsSync(OUT_DIR))
             rmSync(OUT_DIR, { recursive: true, force: true })
     })
@@ -207,5 +215,62 @@ describe('Execution Engine', () => {
 
         const editPipeline = pkg().put(edit('non_existent_*.json').set('a', 1))
         await expect(editPipeline.execute()).rejects.toThrow('Cannot edit non_existent_*.json: No matching files found in the output directory.')
+    })
+
+    test('Hacker case: Path traversal is prevented across operations', async () => {
+        const traversalPaths = ['../../etc/passwd', '../outside.json', '/root/secret']
+
+        for (const badPath of traversalPaths) {
+            const createPipeline = pkg().put(create(badPath, 'hacked'))
+            await expect(createPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const editPipeline = pkg().put(edit(badPath).set('hacked', true))
+            await expect(editPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const removePipeline = pkg().put(remove(badPath))
+            await expect(removePipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const copySrcPipeline = pkg().put(copy(badPath, 'dest'))
+            await expect(copySrcPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const copyDestPipeline = pkg().put(copy('src', badPath))
+            await expect(copyDestPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const moveSrcPipeline = pkg().put(move(badPath, 'dest'))
+            await expect(moveSrcPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+
+            const moveDestPipeline = pkg().put(move('src', badPath))
+            await expect(moveDestPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+        }
+    })
+
+    test('Absurd case: downloading from random mock URL that returns bad HTTP status', async () => {
+        // We temporarily override the mock fetch
+        const originalFetch = global.fetch;
+        (global.fetch as any) = async (_url: string | URL | Request) => {
+            return new Response('Not Found', { status: 404, statusText: 'Not Found' }) as unknown as Response
+        }
+
+        try {
+            const pipeline = pkg().put(get('http://random-repo.com/bad-file.zip'))
+            await expect(pipeline.execute()).rejects.toThrow('Failed to download http://random-repo.com/bad-file.zip: Not Found')
+        } finally {
+            global.fetch = originalFetch
+        }
+    })
+
+    test('Hacker case: Zip Slip vulnerability is mitigated', async () => {
+        const originalFetch = global.fetch;
+        (global.fetch as any) = async (_url: string | URL | Request) => {
+            const buf = readFileSync(MOCK_MALICIOUS_ZIP_PATH)
+            return new Response(buf, { status: 200 }) as unknown as Response
+        }
+
+        try {
+            const pipeline = pkg().put(get('http://mock.com/malicious.zip').unpack())
+            await expect(pipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+        } finally {
+            global.fetch = originalFetch
+        }
     })
 })

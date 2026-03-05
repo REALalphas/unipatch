@@ -10,7 +10,7 @@ import {
     copyFileSync,
     createWriteStream,
 } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve, relative, isAbsolute } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
@@ -37,6 +37,21 @@ import { modifyContent, parsers } from './parsers'
 
 export const OUT_DIR = 'out'
 export const TMP_DIR_BASE = join(OUT_DIR, '.unipatch_tmp')
+
+/**
+ * Resolves and sanitizes user-provided paths to prevent path traversal outside of the base directory.
+ */
+export function resolveSafePath(baseDir: string, userPath: string): string {
+    const resolvedBase = resolve(baseDir)
+    const resolvedPath = resolve(resolvedBase, userPath)
+
+    const rel = relative(resolvedBase, resolvedPath)
+    const isEscaping = rel === '..' || rel.startsWith('..\\') || rel.startsWith('../')
+    if (isEscaping || isAbsolute(rel)) {
+        throw new Error(`Security Error: Path traversal detected - ${userPath}`)
+    }
+    return resolvedPath
+}
 
 /**
  * Downloads a file from a URL to a specified destination via streaming to avoid OOM for large files.
@@ -256,6 +271,14 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
     if (step.shouldUnpack) {
         if (filename.endsWith('.zip')) {
             const zip = new AdmZip(cachedFilePath)
+
+            // Mitigate Zip Slip vulnerability
+            for (const entry of zip.getEntries()) {
+                // AdmZip entryName can have bad characters. We simulate extraction destination:
+                const destPath = resolve(stepTmpDir, entry.entryName)
+                resolveSafePath(stepTmpDir, destPath) // Throws if path traversal
+            }
+
             zip.extractAllTo(stepTmpDir, true)
         } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
             // Need to manually wrap sync in async wrapper for proper bun compatibility,
@@ -265,6 +288,10 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                 file: cachedFilePath,
                 cwd: stepTmpDir,
                 sync: true,
+                onentry: (entry) => {
+                    const destPath = join(stepTmpDir, entry.path)
+                    resolveSafePath(stepTmpDir, destPath) // Mitigate Tar Slip
+                }
             })
         } else {
             throw new Error(
@@ -292,7 +319,7 @@ async function executeCreate(
 ): Promise<void> {
     // We are creating a file conceptually inside OUT_DIR,
     // but practically we create it in stepTmpDir so it gets moved over.
-    const destPath = join(stepTmpDir, step.path)
+    const destPath = resolveSafePath(stepTmpDir, step.path)
     const destDir = dirname(destPath)
     if (!existsSync(destDir)) {
         mkdirSync(destDir, { recursive: true })
@@ -315,6 +342,7 @@ async function executeCreate(
 }
 
 async function executeEdit(step: EditNode, stepTmpDir: string): Promise<void> {
+    resolveSafePath(OUT_DIR, step.path) // Security check
     const pathsToEdit = getMatchedPaths(OUT_DIR, step.path)
 
     if (pathsToEdit.length === 0) {
@@ -366,6 +394,7 @@ async function executeRemove(
     step: RemoveNode,
     stepTmpDir: string,
 ): Promise<void> {
+    resolveSafePath(OUT_DIR, step.path) // Security check
     const pathsToRemove = getMatchedPaths(OUT_DIR, step.path)
 
     // Sort descending by length to remove deepest paths first, preventing parent deletion before children
@@ -379,6 +408,8 @@ async function executeRemove(
 }
 
 async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
+    resolveSafePath(OUT_DIR, step.src) // Security check
+    resolveSafePath(stepTmpDir, step.dest) // Security check
     const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
     if (matchedPaths.length === 0) {
@@ -388,12 +419,12 @@ async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
     const isMultiMatch = matchedPaths.length > 1 || /[?*{}\[\]]/.test(step.src)
 
     for (const srcPath of matchedPaths) {
-        let destTmpPath = join(stepTmpDir, step.dest)
+        let destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
         if (isMultiMatch) {
             // For multiple files, dest acts as a directory
-            const baseName = require('path').basename(srcPath)
-            destTmpPath = join(destTmpPath, baseName)
+            const baseName = require('node:path').basename(srcPath)
+            destTmpPath = resolveSafePath(destTmpPath, baseName)
         }
 
         const stat = statSync(srcPath)
@@ -419,6 +450,8 @@ async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
 }
 
 async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
+    resolveSafePath(OUT_DIR, step.src) // Security check
+    resolveSafePath(stepTmpDir, step.dest) // Security check
     const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
     if (matchedPaths.length === 0) {
@@ -434,12 +467,12 @@ async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
     for (const srcPath of matchedPaths) {
         if (!existsSync(srcPath)) continue // Might have been moved as part of a parent directory
 
-        let destTmpPath = join(stepTmpDir, step.dest)
+        let destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
         if (isMultiMatch) {
             // For multiple files, dest acts as a directory
-            const baseName = require('path').basename(srcPath)
-            destTmpPath = join(destTmpPath, baseName)
+            const baseName = require('node:path').basename(srcPath)
+            destTmpPath = resolveSafePath(destTmpPath, baseName)
         }
 
         const stat = statSync(srcPath)
