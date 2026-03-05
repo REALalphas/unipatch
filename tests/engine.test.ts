@@ -60,7 +60,8 @@ describe('Execution Engine', () => {
         clearAllCache()
         if (existsSync(MOCK_ZIP_PATH)) rmSync(MOCK_ZIP_PATH)
         if (existsSync(MOCK_MALICIOUS_ZIP_PATH)) rmSync(MOCK_MALICIOUS_ZIP_PATH)
-        if (existsSync(LOCAL_MOCK_DIR)) rmSync(LOCAL_MOCK_DIR, { recursive: true, force: true })
+        if (existsSync(LOCAL_MOCK_DIR))
+            rmSync(LOCAL_MOCK_DIR, { recursive: true, force: true })
         if (existsSync(LOCAL_MOCK_FILE)) rmSync(LOCAL_MOCK_FILE)
         if (existsSync(OUT_DIR))
             rmSync(OUT_DIR, { recursive: true, force: true })
@@ -138,7 +139,9 @@ describe('Execution Engine', () => {
 
         expect(existsSync(join(OUT_DIR, 'docs', 'backup.txt'))).toBe(true)
         // Verify it's a file, not a directory
-        expect(statSync(join(OUT_DIR, 'docs', 'backup.txt')).isFile()).toBe(true)
+        expect(statSync(join(OUT_DIR, 'docs', 'backup.txt')).isFile()).toBe(
+            true,
+        )
         expect(readFileSync(join(OUT_DIR, 'docs', 'backup.txt'), 'utf-8')).toBe(
             'hello',
         )
@@ -148,7 +151,9 @@ describe('Execution Engine', () => {
         expect(existsSync(join(OUT_DIR, 'docs', 'archive', 'readme.md'))).toBe(
             true,
         ) // Moved to new loc
-        expect(statSync(join(OUT_DIR, 'docs', 'archive', 'readme.md')).isFile()).toBe(true)
+        expect(
+            statSync(join(OUT_DIR, 'docs', 'archive', 'readme.md')).isFile(),
+        ).toBe(true)
         expect(
             readFileSync(
                 join(OUT_DIR, 'docs', 'archive', 'readme.md'),
@@ -187,33 +192,41 @@ describe('Execution Engine', () => {
 
         expect(existsSync(join(OUT_DIR, 'old_name.txt'))).toBe(false)
         expect(existsSync(join(OUT_DIR, 'new_name.txt'))).toBe(true)
-        expect(readFileSync(join(OUT_DIR, 'new_name.txt'), 'utf-8')).toBe('content')
+        expect(readFileSync(join(OUT_DIR, 'new_name.txt'), 'utf-8')).toBe(
+            'content',
+        )
 
         expect(existsSync(join(OUT_DIR, 'old_folder'))).toBe(false)
         expect(existsSync(join(OUT_DIR, 'new_folder', 'data.txt'))).toBe(true)
-        expect(readFileSync(join(OUT_DIR, 'new_folder', 'data.txt'), 'utf-8')).toBe('data')
+        expect(
+            readFileSync(join(OUT_DIR, 'new_folder', 'data.txt'), 'utf-8'),
+        ).toBe('data')
     })
 
     test('Rename and copy overwrite checks', async () => {
         const pipeline1 = pkg().put(
             create('src.txt', 'a'),
             create('dest.txt', 'b'),
-            copy('src.txt', 'dest.txt')
+            copy('src.txt', 'dest.txt'),
         )
-        await expect(pipeline1.execute()).rejects.toThrow('Destination file already exists and overwrite is false')
+        await expect(pipeline1.execute()).rejects.toThrow(
+            'Destination file already exists and overwrite is false',
+        )
 
         const pipeline2 = pkg().put(
             create('src.txt', 'a'),
             create('dest.txt', 'b'),
-            rename('src.txt', 'dest.txt')
+            rename('src.txt', 'dest.txt'),
         )
-        await expect(pipeline2.execute()).rejects.toThrow('Destination already exists and overwrite is false')
+        await expect(pipeline2.execute()).rejects.toThrow(
+            'Destination already exists and overwrite is false',
+        )
 
         // With overwrite true, it should succeed
         const pipeline3 = pkg().put(
             create('src.txt', 'a'),
             create('dest.txt', 'b'),
-            copy('src.txt', 'dest.txt', { overwrite: true })
+            copy('src.txt', 'dest.txt', { overwrite: true }),
         )
         await pipeline3.execute()
         expect(readFileSync(join(OUT_DIR, 'dest.txt'), 'utf-8')).toBe('a')
@@ -223,18 +236,22 @@ describe('Execution Engine', () => {
         const pipeline = pkg().put(
             create('file1.txt', '1'),
             create('file2.txt', '2'),
-            rename('file*.txt', 'dest')
+            rename('file*.txt', 'dest'),
         )
-        await expect(pipeline.execute()).rejects.toThrow('Multiple matches found')
+        await expect(pipeline.execute()).rejects.toThrow(
+            'Multiple matches found',
+        )
     })
 
     test('Copy multiple files without trailing slash throws error', async () => {
         const pipeline = pkg().put(
             create('file1.txt', '1'),
             create('file2.txt', '2'),
-            copy('file*.txt', 'dest') // no trailing slash
+            copy('file*.txt', 'dest'), // no trailing slash
         )
-        await expect(pipeline.execute()).rejects.toThrow('Cannot copy multiple files to a single file path without a trailing slash: dest')
+        await expect(pipeline.execute()).rejects.toThrow(
+            'Cannot copy multiple files to a single file path without a trailing slash: dest',
+        )
     })
 
     test('Copy and Move directory operations with filters', async () => {
@@ -275,7 +292,7 @@ describe('Execution Engine', () => {
             edit('*.json').set('b', 3),
             copy('file*.json', 'copied_jsons/'), // Added trailing slash to indicate directory
             move('other.txt', 'moved_other.txt'),
-            remove('delete_me_*.json')
+            remove('delete_me_*.json'),
         )
 
         await pipeline.execute()
@@ -283,13 +300,18 @@ describe('Execution Engine', () => {
         // 1. Verify edit on multiple files
         // Wait, files are removed by the last step, let's copy them first
         // Actually, we copy them, so copied_jsons/file1.json should have the edit.
-        const copiedFile1 = readFileSync(join(OUT_DIR, 'copied_jsons', 'file1.json'), 'utf-8')
+        const copiedFile1 = readFileSync(
+            join(OUT_DIR, 'copied_jsons', 'file1.json'),
+            'utf-8',
+        )
         const parsed = JSON.parse(copiedFile1)
         expect(parsed.a).toBe(1)
         expect(parsed.b).toBe(3) // Edit applied
 
         // 2. Verify copy with multiple matches creates a directory
-        expect(existsSync(join(OUT_DIR, 'copied_jsons', 'file2.json'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'copied_jsons', 'file2.json'))).toBe(
+            true,
+        )
 
         // 3. Verify move
         expect(existsSync(join(OUT_DIR, 'moved_other.txt'))).toBe(true)
@@ -302,67 +324,102 @@ describe('Execution Engine', () => {
 
     test('Glob pattern errors on non-existent matches for copy, move, and edit', async () => {
         const copyPipeline = pkg().put(copy('non_existent_*.json', 'dest'))
-        await expect(copyPipeline.execute()).rejects.toThrow('Cannot copy non_existent_*.json: No matching source files found.')
+        await expect(copyPipeline.execute()).rejects.toThrow(
+            'Cannot copy non_existent_*.json: No matching source files found.',
+        )
 
         const movePipeline = pkg().put(move('non_existent_*.json', 'dest'))
-        await expect(movePipeline.execute()).rejects.toThrow('Cannot move non_existent_*.json: No matching source files found.')
+        await expect(movePipeline.execute()).rejects.toThrow(
+            'Cannot move non_existent_*.json: No matching source files found.',
+        )
 
         const editPipeline = pkg().put(edit('non_existent_*.json').set('a', 1))
-        await expect(editPipeline.execute()).rejects.toThrow('Cannot edit non_existent_*.json: No matching files found in the output directory.')
+        await expect(editPipeline.execute()).rejects.toThrow(
+            'Cannot edit non_existent_*.json: No matching files found in the output directory.',
+        )
     })
 
     test('Hacker case: Path traversal is prevented across operations', async () => {
-        const traversalPaths = ['../../etc/passwd', '../outside.json', '/root/secret']
+        const traversalPaths = [
+            '../../etc/passwd',
+            '../outside.json',
+            '/root/secret',
+        ]
 
         for (const badPath of traversalPaths) {
             const createPipeline = pkg().put(create(badPath, 'hacked'))
-            await expect(createPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(createPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const editPipeline = pkg().put(edit(badPath).set('hacked', true))
-            await expect(editPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(editPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const removePipeline = pkg().put(remove(badPath))
-            await expect(removePipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(removePipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const copySrcPipeline = pkg().put(copy(badPath, 'dest'))
-            await expect(copySrcPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(copySrcPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const copyDestPipeline = pkg().put(copy('src', badPath))
-            await expect(copyDestPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(copyDestPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const moveSrcPipeline = pkg().put(move(badPath, 'dest'))
-            await expect(moveSrcPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(moveSrcPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
 
             const moveDestPipeline = pkg().put(move('src', badPath))
-            await expect(moveDestPipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            await expect(moveDestPipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
         }
     })
 
     test('Absurd case: downloading from random mock URL that returns bad HTTP status', async () => {
         // We temporarily override the mock fetch
-        const originalFetch = global.fetch;
-        (global.fetch as any) = async (_url: string | URL | Request) => {
-            return new Response('Not Found', { status: 404, statusText: 'Not Found' }) as unknown as Response
+        const originalFetch = global.fetch
+        ;(global.fetch as any) = async (_url: string | URL | Request) => {
+            return new Response('Not Found', {
+                status: 404,
+                statusText: 'Not Found',
+            }) as unknown as Response
         }
 
         try {
-            const pipeline = pkg().put(get('http://random-repo.com/bad-file.zip'))
-            await expect(pipeline.execute()).rejects.toThrow('Failed to download http://random-repo.com/bad-file.zip: Not Found')
+            const pipeline = pkg().put(
+                get('http://random-repo.com/bad-file.zip'),
+            )
+            await expect(pipeline.execute()).rejects.toThrow(
+                'Failed to download http://random-repo.com/bad-file.zip: Not Found',
+            )
         } finally {
             global.fetch = originalFetch
         }
     })
 
     test('Hacker case: Zip Slip vulnerability is mitigated', async () => {
-        const originalFetch = global.fetch;
-        (global.fetch as any) = async (_url: string | URL | Request) => {
+        const originalFetch = global.fetch
+        ;(global.fetch as any) = async (_url: string | URL | Request) => {
             const buf = readFileSync(MOCK_MALICIOUS_ZIP_PATH)
             return new Response(buf, { status: 200 }) as unknown as Response
         }
 
         try {
-            const pipeline = pkg().put(get('http://mock.com/malicious.zip').unpack())
-            await expect(pipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
+            const pipeline = pkg().put(
+                get('http://mock.com/malicious.zip').unpack(),
+            )
+            await expect(pipeline.execute()).rejects.toThrow(
+                /Security Error: Path traversal detected/,
+            )
         } finally {
             global.fetch = originalFetch
         }
@@ -371,23 +428,29 @@ describe('Execution Engine', () => {
     test('Local Get: File and Directory Copying', async () => {
         const pipeline = pkg().put(
             get(`local:${LOCAL_MOCK_FILE}`),
-            get(`local:${LOCAL_MOCK_DIR}`)
+            get(`local:${LOCAL_MOCK_DIR}`),
         )
 
         await pipeline.execute()
 
         expect(existsSync(join(OUT_DIR, 'local_mock.txt'))).toBe(true)
-        expect(readFileSync(join(OUT_DIR, 'local_mock.txt'), 'utf-8')).toBe('local file content')
+        expect(readFileSync(join(OUT_DIR, 'local_mock.txt'), 'utf-8')).toBe(
+            'local file content',
+        )
 
-        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'))).toBe(true)
-        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file2.txt'))).toBe(true)
-        expect(readFileSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'), 'utf-8')).toBe('file1 content')
+        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'))).toBe(
+            true,
+        )
+        expect(existsSync(join(OUT_DIR, 'local_mock_dir', 'file2.txt'))).toBe(
+            true,
+        )
+        expect(
+            readFileSync(join(OUT_DIR, 'local_mock_dir', 'file1.txt'), 'utf-8'),
+        ).toBe('file1 content')
     })
 
     test('Local Get: Unpacking Directory', async () => {
-        const pipeline = pkg().put(
-            get(`local:${LOCAL_MOCK_DIR}`).unpack()
-        )
+        const pipeline = pkg().put(get(`local:${LOCAL_MOCK_DIR}`).unpack())
 
         await pipeline.execute()
 
@@ -395,12 +458,14 @@ describe('Execution Engine', () => {
         expect(existsSync(join(OUT_DIR, 'file1.txt'))).toBe(true)
         expect(existsSync(join(OUT_DIR, 'file2.txt'))).toBe(true)
         expect(existsSync(join(OUT_DIR, 'local_mock_dir'))).toBe(false)
-        expect(readFileSync(join(OUT_DIR, 'file1.txt'), 'utf-8')).toBe('file1 content')
+        expect(readFileSync(join(OUT_DIR, 'file1.txt'), 'utf-8')).toBe(
+            'file1 content',
+        )
     })
 
     test('Local Get: Unpacking and Filtering Directory', async () => {
         const pipeline = pkg().put(
-            get(`local:${LOCAL_MOCK_DIR}`).unpack().ignore('file2.txt')
+            get(`local:${LOCAL_MOCK_DIR}`).unpack().ignore('file2.txt'),
         )
 
         await pipeline.execute()
@@ -410,19 +475,41 @@ describe('Execution Engine', () => {
     })
 
     test('Local Get: Non-existent path', async () => {
-        const pipeline = pkg().put(
-            get('local:/path/that/does/not/exist.txt')
-        )
+        const pipeline = pkg().put(get('local:/path/that/does/not/exist.txt'))
         await expect(pipeline.execute()).rejects.toThrow('Local path not found')
     })
 
     test('Local Get: Unpacking a local zip file', async () => {
-        const pipeline = pkg().put(
-            get(`local:${MOCK_ZIP_PATH}`).unpack()
-        )
+        const pipeline = pkg().put(get(`local:${MOCK_ZIP_PATH}`).unpack())
         await pipeline.execute()
 
         expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
         expect(existsSync(join(OUT_DIR, 'data.txt'))).toBe(true)
+    })
+
+    test('Unpack overwrite options', async () => {
+        // execute() cleans OUT_DIR initially, so we need to run multiple nodes in one pipeline
+        // to test the overwrite conflict, or manually create files.
+        // We will create data.txt and then try to unpack.
+
+        const pipelineConflict = pkg().put(
+            create('data.txt', 'existing data'),
+            get('http://mock.com/mock.zip').unpack({ overwrite: false }),
+        )
+        await expect(pipelineConflict.execute()).rejects.toThrow(
+            /Cannot unpack because the following files already exist and overwrite is false:/,
+        )
+
+        const pipelineSuccess = pkg().put(
+            create('data.txt', 'existing data'),
+            get('http://mock.com/mock.zip').unpack({ overwrite: true }),
+        )
+        // With overwrite true (or undefined), it should not throw and the unpack should overwrite.
+        await expect(pipelineSuccess.execute()).resolves.toBeUndefined()
+
+        // Let's verify data.txt from the zip replaced "existing data"
+        expect(readFileSync(join(OUT_DIR, 'data.txt'), 'utf8')).toBe(
+            'hello world',
+        )
     })
 })

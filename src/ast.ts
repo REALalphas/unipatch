@@ -6,11 +6,16 @@ export interface ASTNode {
     type: string
 }
 
+export interface UnpackOptions {
+    overwrite?: boolean
+}
+
 export class GetNode implements ASTNode {
     type = 'Get'
     url: string
     options: ProviderOptions
     shouldUnpack = false
+    unpackOptions?: UnpackOptions
     ignorePatterns: string[] = []
     onlyPatterns: string[] = []
 
@@ -19,8 +24,9 @@ export class GetNode implements ASTNode {
         this.options = options
     }
 
-    unpack(): this {
+    unpack(options?: UnpackOptions): this {
         this.shouldUnpack = true
+        this.unpackOptions = options
         return this
     }
 
