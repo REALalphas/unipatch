@@ -1,4 +1,5 @@
 import { minimatch } from 'minimatch'
+import { getCachedProviderData, setCachedProviderData } from './cache'
 
 export interface ProviderOptions {
     version?: string // 'latest', '1.x', exact version, or undefined (defaults to latest)
@@ -51,14 +52,19 @@ export class GitHubProvider extends GitProvider {
             },
         }
 
-        const response = await fetch(apiUrl, fetchOptions)
-        if (!response.ok) {
-            throw new Error(
-                `Failed to fetch GitHub releases for ${this.repo}: ${response.statusText}`,
-            )
-        }
+        let releases: any[] | null = getCachedProviderData('github', this.repo, 60 * 60 * 1000)
 
-        const releases = (await response.json()) as any[]
+        if (!releases) {
+            const response = await fetch(apiUrl, fetchOptions)
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch GitHub releases for ${this.repo}: ${response.statusText}`,
+                )
+            }
+
+            releases = (await response.json()) as any[]
+            setCachedProviderData('github', this.repo, releases)
+        }
 
         // Filter out pre-releases if not allowed
         const validReleases = allowPreRelease
@@ -136,14 +142,19 @@ export class GitLabProvider extends GitProvider {
             },
         }
 
-        const response = await fetch(apiUrl, fetchOptions)
-        if (!response.ok) {
-            throw new Error(
-                `Failed to fetch GitLab releases for ${this.repo}: ${response.statusText}`,
-            )
-        }
+        let releases: any[] | null = getCachedProviderData('gitlab', this.repo, 60 * 60 * 1000)
 
-        const releases = (await response.json()) as any[]
+        if (!releases) {
+            const response = await fetch(apiUrl, fetchOptions)
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch GitLab releases for ${this.repo}: ${response.statusText}`,
+                )
+            }
+
+            releases = (await response.json()) as any[]
+            setCachedProviderData('gitlab', this.repo, releases)
+        }
 
         // GitLab releases don't have a direct `prerelease` flag like GitHub.
         // We'll use a heuristic based on common tag naming conventions to identify pre-releases.
