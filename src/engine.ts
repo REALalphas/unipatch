@@ -203,30 +203,14 @@ function getMatchedPaths(baseDir: string, pattern: string | string[]): string[] 
 
     function traverse(currentDir: string) {
         if (!existsSync(currentDir)) return
-        let entries
-        try {
-            entries = readdirSync(currentDir, { withFileTypes: true })
-        } catch (err: any) {
-            // Ignore permission denied errors when traversing
-            if (err.code === 'EACCES' || err.code === 'EPERM') return
-            throw err
-        }
+        const entries = readdirSync(currentDir, { withFileTypes: true })
         for (const entry of entries) {
             const fullPath = join(currentDir, entry.name)
+            const relativePath = fullPath
+                .replace(baseDir + '/', '')
+                .replace(baseDir + '\\', '')
 
-            // Normalize path separators to forward slashes for minimatch
-            const normalizedFullPath = fullPath.replace(/\\/g, '/')
-            const normalizedBaseDir = baseDir.replace(/\\/g, '/')
-
-            const relativePath = normalizedFullPath
-                .replace(normalizedBaseDir + '/', '')
-
-            const isMatch = patterns.some(p => {
-                const normalizedPattern = p.replace(/\\/g, '/')
-                return minimatch(normalizedFullPath, normalizedPattern) ||
-                       minimatch(relativePath, normalizedPattern, { matchBase: true })
-            })
-
+            const isMatch = patterns.some(p => minimatch(relativePath, p, { matchBase: true }))
             if (isMatch) {
                 matched.push(fullPath)
             }
@@ -312,196 +296,55 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
     }
 
     if (step.url.startsWith('local:')) {
-        const pattern = step.url.replace('local:', '')
+        const localPath = resolve(process.cwd(), step.url.replace('local:', ''))
 
-        // Check if pattern is an exact path first (backwards compatibility / exact folder match)
-        const exactLocalPath = resolve(process.cwd(), pattern)
-        let matchedPaths = [exactLocalPath]
-
-        // If it does not exist exactly, treat it as a glob pattern
-        if (!existsSync(exactLocalPath)) {
-            // For large file systems this is slow. We should just traverse from CWD or the parsed root.
-            let baseDir = process.cwd()
-            let searchPattern = pattern
-
-            if (isAbsolute(pattern)) {
-                const parts = resolve(pattern).split(/[/\\]/)
-                let highestExisting = ''
-                if (process.platform === 'win32') {
-                    highestExisting = parts[0] + '\\'
-                } else {
-                    highestExisting = '/'
-                }
-
-                let current = highestExisting
-                for (let i = process.platform === 'win32' ? 1 : 1; i < parts.length; i++) {
-                    if (!parts[i]) continue;
-                    // Check if part contains a glob character
-                    if (parts[i]!.includes('*') || parts[i]!.includes('?') || parts[i]!.includes('[')) {
-                        break;
-                    }
-                    const next = join(current, parts[i] as string)
-                    if (existsSync(next) && statSync(next).isDirectory()) {
-                        current = next
-                    } else {
-                        break
-                    }
-                }
-                baseDir = current
-            } else {
-                // relative path. Find highest existing dir before glob.
-                const parts = pattern.split(/[/\\]/)
-                let current = process.cwd()
-                for (let i = 0; i < parts.length; i++) {
-                    if (!parts[i]) continue;
-                    if (parts[i]!.includes('*') || parts[i]!.includes('?') || parts[i]!.includes('[')) {
-                        break;
-                    }
-                    const next = join(current, parts[i] as string)
-                    if (existsSync(next) && statSync(next).isDirectory()) {
-                        current = next
-                    } else {
-                        break
-                    }
-                }
-                baseDir = current
-
-                // For relative patterns, convert the pattern to absolute to match against full paths
-                searchPattern = resolve(process.cwd(), pattern)
-            }
-
-            matchedPaths = getMatchedPaths(baseDir, searchPattern)
+        if (!existsSync(localPath)) {
+            throw new Error(`Local path not found: ${localPath}`)
         }
 
-        if (matchedPaths.length === 0) {
-            throw new Error(`Local path not found: ${pattern}`)
-        }
+        const stat = statSync(localPath)
+        const filename = localPath.split(/[/\\]/).pop() || 'local_file'
 
-        const isArraySource = matchedPaths.length > 1
-        // If we have multiple matches, we must put them into the destDir (it acts as a directory)
-
-        for (const localPath of matchedPaths) {
-            if (!existsSync(localPath)) continue
-
-            const stat = statSync(localPath)
-            const filename = require('node:path').basename(localPath) || 'local_file'
-
-            // If it's a glob match and baseDir is computed, we should preserve directory structure relative to baseDir.
-            // But if exact match, or baseDir is somehow not computed correctly, we default to the old behavior
-            // of putting it right in destDir or destDir/filename.
-            // A more robust approach: if isArraySource, we use the relative path from baseDir to localPath.
-            // However, getMatchedPaths doesn't return baseDir easily here. Wait, `baseDir` is in the scope above!
-            let relativeSubPath = filename
-            let baseDirToUse = ''
-
-            // Recompute baseDir if it was a glob match to preserve relative paths
-            if (!existsSync(exactLocalPath)) {
-                let baseDir = process.cwd()
-                if (isAbsolute(pattern)) {
-                    const parts = resolve(pattern).split(/[/\\]/)
-                    let highestExisting = ''
-                    if (process.platform === 'win32') {
-                        highestExisting = parts[0] + '\\'
-                    } else {
-                        highestExisting = '/'
-                    }
-                    let current = highestExisting
-                    for (let i = process.platform === 'win32' ? 1 : 1; i < parts.length; i++) {
-                        if (!parts[i]) continue;
-                        if (parts[i]!.includes('*') || parts[i]!.includes('?') || parts[i]!.includes('[')) {
-                            break;
-                        }
-                        const next = join(current, parts[i] as string)
-                        if (existsSync(next) && statSync(next).isDirectory()) {
-                            current = next
-                        } else {
-                            break
-                        }
-                    }
-                    baseDir = current
-                } else {
-                    const parts = pattern.split(/[/\\]/)
-                    let current = process.cwd()
-                    for (let i = 0; i < parts.length; i++) {
-                        if (!parts[i]) continue;
-                        if (parts[i]!.includes('*') || parts[i]!.includes('?') || parts[i]!.includes('[')) {
-                            break;
-                        }
-                        const next = join(current, parts[i] as string)
-                        if (existsSync(next) && statSync(next).isDirectory()) {
-                            current = next
-                        } else {
-                            break
-                        }
-                    }
-                    baseDir = current
-                }
-                baseDirToUse = baseDir
-                relativeSubPath = relative(baseDirToUse, localPath)
+        if (stat.isDirectory()) {
+            if (step.shouldUnpack) {
+                // If directory and unpack, copy contents directly to destDir
+                copyDirRecursive(localPath, destDir)
             } else {
-                relativeSubPath = filename
+                // Otherwise, copy directory itself into destDir
+                const targetDir = join(destDir, filename)
+                copyDirRecursive(localPath, targetDir)
             }
+        } else {
+            if (step.shouldUnpack) {
+                if (filename.endsWith('.zip')) {
+                    const zip = new AdmZip(localPath)
 
-            if (stat.isDirectory()) {
-                if (step.shouldUnpack) {
-                    // If directory and unpack, copy contents directly to destDir
-                    // But if multiple matches are unpacked, their contents all mix in destDir (expected behavior of unpack)
-                    // If we want to preserve relative paths, unpack doesn't usually preserve parent dir structure.
-                    // But for globbing a dir, maybe we should preserve it? Unpacking implies flattening its root.
-                    // We'll leave unpack as is (mixing contents)
-                    copyDirRecursive(localPath, destDir)
-                } else {
-                    // Otherwise, copy directory itself into destDir. If multiple, preserve path.
-                    let targetDir = join(destDir, filename)
-                    if (isArraySource && baseDirToUse) {
-                        targetDir = join(destDir, relativeSubPath)
+                    // Mitigate Zip Slip vulnerability
+                    for (const entry of zip.getEntries()) {
+                        const destPath = resolve(destDir, entry.entryName)
+                        resolveSafePath(destDir, destPath) // Throws if path traversal
                     }
-                    copyDirRecursive(localPath, targetDir)
+
+                    zip.extractAllTo(destDir, true)
+                } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
+                    tar.x({
+                        file: localPath,
+                        cwd: destDir,
+                        sync: true,
+                        onentry: (entry) => {
+                            const destPath = join(destDir, entry.path)
+                            resolveSafePath(destDir, destPath) // Mitigate Tar Slip
+                        }
+                    })
+                } else {
+                    throw new Error(`Unsupported archive format for unpacking: ${filename}`)
                 }
             } else {
-                if (step.shouldUnpack) {
-                    let targetExtractDir = destDir
-                    // When unpacking multiple archives matched by glob, should they merge? Yes.
-                    if (filename.endsWith('.zip')) {
-                        const zip = new AdmZip(localPath)
-
-                        // Mitigate Zip Slip vulnerability
-                        for (const entry of zip.getEntries()) {
-                            const destPath = resolve(targetExtractDir, entry.entryName)
-                            resolveSafePath(targetExtractDir, destPath) // Throws if path traversal
-                        }
-
-                        zip.extractAllTo(targetExtractDir, true)
-                    } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
-                        tar.x({
-                            file: localPath,
-                            cwd: targetExtractDir,
-                            sync: true,
-                            onentry: (entry) => {
-                                const destPath = join(targetExtractDir, entry.path)
-                                resolveSafePath(targetExtractDir, destPath) // Mitigate Tar Slip
-                            }
-                        })
-                    } else {
-                        throw new Error(`Unsupported archive format for unpacking: ${filename}`)
-                    }
-                } else {
-                    let targetFile = join(destDir, filename)
-                    if (isArraySource && baseDirToUse) {
-                        targetFile = join(destDir, relativeSubPath)
-                    }
-
-                    const targetFileDir = dirname(targetFile)
-                    if (!existsSync(targetFileDir)) {
-                        mkdirSync(targetFileDir, { recursive: true })
-                    }
-
-                    copyFileSync(localPath, targetFile)
-                }
+                copyFileSync(localPath, join(destDir, filename))
             }
         }
 
-        // Apply filters directly to destDir after all local paths are processed
+        // Apply filters directly to destDir
         if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
             applyFilters(
                 destDir,

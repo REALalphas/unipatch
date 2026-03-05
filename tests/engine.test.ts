@@ -542,16 +542,4 @@ describe('Execution Engine', () => {
 
         await expect(pipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
     })
-
-    test('Local Get: Minimatch pattern matching multiple files', async () => {
-        const pipeline = pkg().put(
-            get(`local:${join(LOCAL_MOCK_DIR, '*.txt')}`).to('matched_files')
-        )
-        await pipeline.execute()
-
-        expect(existsSync(join(OUT_DIR, 'matched_files', 'file1.txt'))).toBe(true)
-        expect(existsSync(join(OUT_DIR, 'matched_files', 'file2.txt'))).toBe(true)
-        expect(readFileSync(join(OUT_DIR, 'matched_files', 'file1.txt'), 'utf-8')).toBe('file1 content')
-        expect(readFileSync(join(OUT_DIR, 'matched_files', 'file2.txt'), 'utf-8')).toBe('file2 content')
-    })
 })
