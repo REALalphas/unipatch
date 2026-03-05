@@ -255,6 +255,67 @@ export async function executeAST(steps: ASTNode[]): Promise<void> {
 }
 
 async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
+    if (step.url.startsWith('local:')) {
+        const localPath = resolve(process.cwd(), step.url.replace('local:', ''))
+
+        if (!existsSync(localPath)) {
+            throw new Error(`Local path not found: ${localPath}`)
+        }
+
+        const stat = statSync(localPath)
+        const filename = localPath.split(/[/\\]/).pop() || 'local_file'
+
+        if (stat.isDirectory()) {
+            if (step.shouldUnpack) {
+                // If directory and unpack, copy contents directly to stepTmpDir
+                copyDirRecursive(localPath, stepTmpDir)
+            } else {
+                // Otherwise, copy directory itself into stepTmpDir
+                const destDir = join(stepTmpDir, filename)
+                copyDirRecursive(localPath, destDir)
+            }
+        } else {
+            if (step.shouldUnpack) {
+                if (filename.endsWith('.zip')) {
+                    const zip = new AdmZip(localPath)
+
+                    // Mitigate Zip Slip vulnerability
+                    for (const entry of zip.getEntries()) {
+                        const destPath = resolve(stepTmpDir, entry.entryName)
+                        resolveSafePath(stepTmpDir, destPath) // Throws if path traversal
+                    }
+
+                    zip.extractAllTo(stepTmpDir, true)
+                } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
+                    tar.x({
+                        file: localPath,
+                        cwd: stepTmpDir,
+                        sync: true,
+                        onentry: (entry) => {
+                            const destPath = join(stepTmpDir, entry.path)
+                            resolveSafePath(stepTmpDir, destPath) // Mitigate Tar Slip
+                        }
+                    })
+                } else {
+                    throw new Error(`Unsupported archive format for unpacking: ${filename}`)
+                }
+            } else {
+                copyFileSync(localPath, join(stepTmpDir, filename))
+            }
+        }
+
+        // Apply filters directly to stepTmpDir
+        if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
+            applyFilters(
+                stepTmpDir,
+                stepTmpDir,
+                step.ignorePatterns,
+                step.onlyPatterns,
+            )
+        }
+        return
+    }
+
     let downloadUrl = step.url
     let filename = step.url.split('/').pop() || 'downloaded_file'
 
