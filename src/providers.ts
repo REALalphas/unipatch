@@ -1,20 +1,36 @@
 import { minimatch } from 'minimatch'
 
+/**
+ * Options used when fetching artifacts from external providers (like GitHub or GitLab).
+ */
 export interface ProviderOptions {
-    version?: string // 'latest', '1.x', exact version, or undefined (defaults to latest)
+    /** The version of the release to fetch (e.g., 'latest', '1.x', or an exact version like 'v1.2.3'). Defaults to 'latest'. */
+    version?: string
+    /** Whether to allow fetching pre-release versions. */
     allowPreRelease?: boolean
-    assetPattern?: string // e.g. 'test_v*buzz*_windows.zip'
+    /** An optional glob pattern to filter and select a specific asset from the release (e.g., '*windows*.zip'). */
+    assetPattern?: string
+    /** Custom headers to send in the fetch request. */
     headers?: Record<string, string>
 }
 
+/**
+ * Represents the resolved URL and filename for a specific downloaded artifact from a provider.
+ */
 export interface ResolvedAsset {
     url: string
     filename: string
 }
 
+/**
+ * An abstract base class for Git-based artifact providers.
+ */
 export abstract class GitProvider {
     protected repo: string
 
+    /**
+     * @param repo The repository identifier (e.g., 'owner/repo').
+     */
     constructor(repo: string) {
         this.repo = repo
     }
@@ -33,7 +49,15 @@ export abstract class GitProvider {
     }
 }
 
+/**
+ * A provider implementation for resolving and fetching artifacts from GitHub releases.
+ */
 export class GitHubProvider extends GitProvider {
+    /**
+     * Resolves the best matching asset URL and filename from GitHub releases based on options.
+     * @param options Configuration for release filtering and fetching.
+     * @returns A promise resolving to the final URL and filename of the requested artifact.
+     */
     async resolveAsset(options: ProviderOptions): Promise<ResolvedAsset> {
         const {
             version = 'latest',
@@ -117,7 +141,15 @@ export class GitHubProvider extends GitProvider {
     }
 }
 
+/**
+ * A provider implementation for resolving and fetching artifacts from GitLab releases.
+ */
 export class GitLabProvider extends GitProvider {
+    /**
+     * Resolves the best matching asset URL and filename from GitLab releases based on options.
+     * @param options Configuration for release filtering and fetching.
+     * @returns A promise resolving to the final URL and filename of the requested artifact.
+     */
     async resolveAsset(options: ProviderOptions): Promise<ResolvedAsset> {
         // Simple implementation for GitLab. GitLab API requires encoded project path.
         const encodedRepo = encodeURIComponent(this.repo)

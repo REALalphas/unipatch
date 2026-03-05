@@ -36,7 +36,14 @@ import {
 } from './cache'
 import { modifyContent, parsers } from './parsers'
 
+/**
+ * The default directory where the final unpacked/built files are stored.
+ */
 export const OUT_DIR = 'out'
+
+/**
+ * The base directory for temporary isolated step executions.
+ */
 export const TMP_DIR_BASE = join(OUT_DIR, '.unipatch_tmp')
 
 /**
@@ -225,6 +232,13 @@ function getMatchedPaths(baseDir: string, pattern: string | string[]): string[] 
     return matched
 }
 
+/**
+ * Executes a sequence of AST nodes in a declarative deployment pipeline.
+ * Iterates through each step sequentially, creating isolated temporary environments,
+ * performing the operations, and merging the successful outputs into the final output directory.
+ * @param steps An array of ASTNode instances representing the deployment steps.
+ * @returns A promise that resolves when the execution pipeline completes successfully.
+ */
 export async function executeAST(steps: ASTNode[]): Promise<void> {
     // 1. Setup out directory
     if (existsSync(OUT_DIR)) {

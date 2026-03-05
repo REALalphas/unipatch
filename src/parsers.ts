@@ -2,16 +2,24 @@ import * as yaml from 'yaml'
 import * as ini from 'ini'
 import JSON5 from 'json5'
 
+/**
+ * Defines the supported file formats for file operations.
+ */
 export type FileFormat = 'json' | 'yaml' | 'ini'
 
 /**
- * Interface for file parsers.
+ * Interface representing a strategy for parsing and stringifying file content.
  */
 export interface Parser {
+    /** Parses a string into an object. */
     parse(content: string): any
+    /** Converts an object back into a string representation. */
     stringify(data: any): string
 }
 
+/**
+ * A registry of supported format parsers, keyed by the FileFormat type.
+ */
 export const parsers: Record<FileFormat, Parser> = {
     json: {
         parse: (content: string) => JSON5.parse(content || '{}'),
