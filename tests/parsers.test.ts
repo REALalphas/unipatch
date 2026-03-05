@@ -124,4 +124,20 @@ key=value`
             modifyContent('{}', 'xml' as any, [])
         }).toThrow(/Unsupported format/)
     })
+
+    test('setNestedValue prevents prototype pollution', () => {
+        const obj = {}
+        // Use a random key to avoid conflict with other tests
+        const key = `polluted_${Math.random().toString(36).slice(2)}`
+
+        expect(() => setNestedValue(obj, `__proto__.${key}`, 'yes')).toThrow()
+        expect((Object.prototype as any)[key]).toBeUndefined()
+
+        expect(() =>
+            setNestedValue(obj, `constructor.prototype.${key}`, 'yes'),
+        ).toThrow()
+        expect((Object.prototype as any)[key]).toBeUndefined()
+
+        expect(() => setNestedValue(obj, `prototype.${key}`, 'yes')).toThrow()
+    })
 })
