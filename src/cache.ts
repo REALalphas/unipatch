@@ -6,6 +6,7 @@ import {
     readFileSync,
     rmSync,
     writeFileSync,
+    statSync,
 } from 'node:fs'
 import { join } from 'node:path'
 
@@ -13,6 +14,11 @@ import { join } from 'node:path'
  * Cache directory path.
  */
 export const CACHE_DIR = '.cache'
+
+/**
+ * Cache directory path for provider data.
+ */
+export const PROVIDER_CACHE_DIR = join(CACHE_DIR, 'providers')
 
 /**
  * Generates an MD5 hash for a given URL or identifier.
@@ -125,4 +131,59 @@ export async function markAsCached(
 
     const actualHash = await calculateFileHash(filePath)
     writeFileSync(hashFile, actualHash, 'utf-8')
+}
+
+/**
+ * Retrieves cached provider data if it exists and is not older than the TTL.
+ * @param provider The name of the provider (e.g., 'github', 'gitlab').
+ * @param repo The repository name (e.g., 'user/repo').
+ * @param ttlMs Time-to-live in milliseconds.
+ * @returns The cached data object or null if expired/not found.
+ */
+export function getCachedProviderData(
+    provider: string,
+    repo: string,
+    ttlMs: number,
+): any | null {
+    const safeRepo = repo.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const cacheFile = join(PROVIDER_CACHE_DIR, `${provider}_${safeRepo}.json`)
+
+    if (existsSync(cacheFile)) {
+        try {
+            const stats = statSync(cacheFile)
+            const now = Date.now()
+            if (now - stats.mtimeMs < ttlMs) {
+                const data = readFileSync(cacheFile, 'utf-8')
+                return JSON.parse(data)
+            }
+        } catch (e) {
+            // Error reading or parsing, ignore and return null
+        }
+    }
+    return null
+}
+
+/**
+ * Saves provider data to the cache.
+ * @param provider The name of the provider (e.g., 'github', 'gitlab').
+ * @param repo The repository name (e.g., 'user/repo').
+ * @param data The data to cache.
+ */
+export function setCachedProviderData(
+    provider: string,
+    repo: string,
+    data: any,
+): void {
+    if (!existsSync(PROVIDER_CACHE_DIR)) {
+        mkdirSync(PROVIDER_CACHE_DIR, { recursive: true })
+    }
+
+    const safeRepo = repo.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const cacheFile = join(PROVIDER_CACHE_DIR, `${provider}_${safeRepo}.json`)
+
+    try {
+        writeFileSync(cacheFile, JSON.stringify(data), 'utf-8')
+    } catch (e) {
+        // Error writing, ignore
+    }
 }
