@@ -296,12 +296,16 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
     }
 
     if (step.url.startsWith('local:')) {
-        let localUrl = step.url.replace('local:', '')
+        let localUrl = step.url.replace("local:", "").trim()
 
         // Handle trailing slash which indicates contents copy
-        const isTrailingSlash = localUrl.endsWith('/') || localUrl.endsWith('\\')
+        const isTrailingSlash = localUrl.endsWith("/") || localUrl.endsWith("\\")
         if (isTrailingSlash) {
             localUrl = localUrl.slice(0, -1)
+        }
+
+        if (!localUrl) {
+            throw new Error(`Local path cannot be empty: ${step.url}`)
         }
 
         const isGlob = localUrl.includes('*') || localUrl.includes('?')
