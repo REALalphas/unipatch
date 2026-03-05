@@ -1,9 +1,8 @@
 name: Publish to NPM
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [created]
 
 jobs:
   test:
@@ -29,7 +28,7 @@ jobs:
       - run: npm install
       - run: npm run build
       
-  publish:
+  publish-npm:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -44,5 +43,5 @@ jobs:
       - run: npm install
       - run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
 
