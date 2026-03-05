@@ -1,6 +1,6 @@
 {
     "name": "unipatch",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "A manager for declarative deployment engine",
     "module": "dist/index.js",
     "main": "dist/index.js",
