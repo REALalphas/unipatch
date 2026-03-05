@@ -25,6 +25,7 @@ import {
     RemoveNode,
     CopyNode,
     MoveNode,
+    RenameNode,
 } from './ast'
 import { getProvider } from './providers'
 import {
@@ -169,10 +170,13 @@ function applyFilters(
 
 
 /**
- * Recursively gets all paths in a directory that match a glob pattern.
+ * Recursively gets all paths in a directory that match a glob pattern or multiple patterns.
  */
-function getMatchedPaths(baseDir: string, pattern: string): string[] {
-    const trimmedPattern = pattern.trim()
+function getMatchedPaths(baseDir: string, pattern: string | string[]): string[] {
+    const patterns = Array.isArray(pattern)
+        ? pattern.map(p => p.trim())
+        : [pattern.trim()]
+
     const matched: string[] = []
 
     function traverse(currentDir: string) {
@@ -184,7 +188,8 @@ function getMatchedPaths(baseDir: string, pattern: string): string[] {
                 .replace(baseDir + '/', '')
                 .replace(baseDir + '\\', '')
 
-            if (minimatch(relativePath, trimmedPattern, { matchBase: true })) {
+            const isMatch = patterns.some(p => minimatch(relativePath, p, { matchBase: true }))
+            if (isMatch) {
                 matched.push(fullPath)
             }
 
@@ -229,6 +234,8 @@ export async function executeAST(steps: ASTNode[]): Promise<void> {
                 await executeCopy(step, stepTmpDir)
             } else if (step instanceof MoveNode) {
                 await executeMove(step, stepTmpDir)
+            } else if (step instanceof RenameNode) {
+                await executeRename(step, stepTmpDir)
             }
 
             // Move contents from stepTmpDir to OUT_DIR (overwriting)
@@ -408,7 +415,12 @@ async function executeRemove(
 }
 
 async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
-    resolveSafePath(OUT_DIR, step.src) // Security check
+    if (typeof step.src === 'string') {
+        resolveSafePath(OUT_DIR, step.src) // Security check
+    } else {
+        step.src.forEach((p) => resolveSafePath(OUT_DIR, p))
+    }
+
     resolveSafePath(stepTmpDir, step.dest) // Security check
     const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
@@ -416,15 +428,29 @@ async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
         throw new Error(`Cannot copy ${step.src}: No matching source files found.`)
     }
 
-    const isMultiMatch = matchedPaths.length > 1 || /[?*{}\[\]]/.test(step.src)
+    const isArraySource = Array.isArray(step.src)
+    const isDestExplicitDir = step.dest.endsWith('/') || step.dest.endsWith('\\')
+    const isDestDir = isArraySource || isDestExplicitDir
+
+    if (matchedPaths.length > 1 && !isDestDir) {
+        throw new Error(
+            `Cannot copy multiple files to a single file path without a trailing slash: ${step.dest}`
+        )
+    }
 
     for (const srcPath of matchedPaths) {
         let destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
-        if (isMultiMatch) {
-            // For multiple files, dest acts as a directory
+        if (isDestDir) {
             const baseName = require('node:path').basename(srcPath)
             destTmpPath = resolveSafePath(destTmpPath, baseName)
+        }
+
+        // Compute final out dir path to check for overwrite logic
+        const relPath = relative(stepTmpDir, destTmpPath)
+        const finalDestPath = join(OUT_DIR, relPath)
+        if (existsSync(finalDestPath) && !step.options.overwrite) {
+            throw new Error(`Destination file already exists and overwrite is false: ${step.dest}`)
         }
 
         const stat = statSync(srcPath)
@@ -450,7 +476,12 @@ async function executeCopy(step: CopyNode, stepTmpDir: string): Promise<void> {
 }
 
 async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
-    resolveSafePath(OUT_DIR, step.src) // Security check
+    if (typeof step.src === 'string') {
+        resolveSafePath(OUT_DIR, step.src) // Security check
+    } else {
+        step.src.forEach((p) => resolveSafePath(OUT_DIR, p))
+    }
+
     resolveSafePath(stepTmpDir, step.dest) // Security check
     const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
 
@@ -458,21 +489,31 @@ async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
         throw new Error(`Cannot move ${step.src}: No matching source files found.`)
     }
 
-    const isMultiMatch = matchedPaths.length > 1 || /[?*{}\[\]]/.test(step.src)
+    const isArraySource = Array.isArray(step.src)
+    const isDestExplicitDir = step.dest.endsWith('/') || step.dest.endsWith('\\')
+    const isDestDir = isArraySource || isDestExplicitDir
 
-    // Sort descending by length for moves? Probably fine as is since we are just moving to tmpDir.
-    // However, if a directory is moved, we should avoid moving its children individually if they are also matched.
-    // For simplicity, just iterate.
+    if (matchedPaths.length > 1 && !isDestDir) {
+        throw new Error(
+            `Cannot move multiple files to a single file path without a trailing slash: ${step.dest}`
+        )
+    }
 
     for (const srcPath of matchedPaths) {
         if (!existsSync(srcPath)) continue // Might have been moved as part of a parent directory
 
         let destTmpPath = resolveSafePath(stepTmpDir, step.dest)
 
-        if (isMultiMatch) {
-            // For multiple files, dest acts as a directory
+        if (isDestDir) {
             const baseName = require('node:path').basename(srcPath)
             destTmpPath = resolveSafePath(destTmpPath, baseName)
+        }
+
+        // Compute final out dir path to check for overwrite logic
+        const relPath = relative(stepTmpDir, destTmpPath)
+        const finalDestPath = join(OUT_DIR, relPath)
+        if (existsSync(finalDestPath) && !step.options.overwrite) {
+            throw new Error(`Destination file already exists and overwrite is false: ${step.dest}`)
         }
 
         const stat = statSync(srcPath)
@@ -496,5 +537,46 @@ async function executeMove(step: MoveNode, stepTmpDir: string): Promise<void> {
             }
             renameSync(srcPath, destTmpPath)
         }
+    }
+}
+
+async function executeRename(step: RenameNode, stepTmpDir: string): Promise<void> {
+    resolveSafePath(OUT_DIR, step.src)
+    resolveSafePath(stepTmpDir, step.dest)
+    const matchedPaths = getMatchedPaths(OUT_DIR, step.src)
+
+    if (matchedPaths.length === 0) {
+        throw new Error(`Cannot rename ${step.src}: No matching source files found.`)
+    }
+
+    if (matchedPaths.length > 1) {
+        throw new Error(`Cannot rename ${step.src}: Multiple matches found. Use move() or copy() with a trailing slash directory instead.`)
+    }
+
+    const srcPath = matchedPaths[0]
+    // Tell TS srcPath is definitely defined because length === 1
+    if (!srcPath) {
+        throw new Error(`Cannot rename ${step.src}: Source path is undefined.`)
+    }
+
+    const destTmpPath = resolveSafePath(stepTmpDir, step.dest)
+
+    // Check overwrite logic on final dest path
+    const relPath = relative(stepTmpDir, destTmpPath)
+    const finalDestPath = join(OUT_DIR, relPath)
+    if (existsSync(finalDestPath) && !step.options.overwrite) {
+        throw new Error(`Destination already exists and overwrite is false: ${step.dest}`)
+    }
+
+    const stat = statSync(srcPath)
+    if (stat.isDirectory()) {
+        copyDirRecursive(srcPath, destTmpPath)
+        rmSync(srcPath, { recursive: true, force: true })
+    } else {
+        const destDir = dirname(destTmpPath)
+        if (!existsSync(destDir)) {
+            mkdirSync(destDir, { recursive: true })
+        }
+        renameSync(srcPath, destTmpPath)
     }
 }
