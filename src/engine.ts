@@ -287,14 +287,6 @@ export async function executeAST(steps: ASTNode[]): Promise<void> {
 }
 
 async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
-    let destDir = stepTmpDir
-    if (step.toFolder) {
-        destDir = resolveSafePath(stepTmpDir, step.toFolder)
-        if (!existsSync(destDir)) {
-            mkdirSync(destDir, { recursive: true })
-        }
-    }
-
     if (step.url.startsWith('local:')) {
         const localPath = resolve(process.cwd(), step.url.replace('local:', ''))
 
@@ -307,12 +299,12 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
 
         if (stat.isDirectory()) {
             if (step.shouldUnpack) {
-                // If directory and unpack, copy contents directly to destDir
-                copyDirRecursive(localPath, destDir)
+                // If directory and unpack, copy contents directly to stepTmpDir
+                copyDirRecursive(localPath, stepTmpDir)
             } else {
-                // Otherwise, copy directory itself into destDir
-                const targetDir = join(destDir, filename)
-                copyDirRecursive(localPath, targetDir)
+                // Otherwise, copy directory itself into stepTmpDir
+                const destDir = join(stepTmpDir, filename)
+                copyDirRecursive(localPath, destDir)
             }
         } else {
             if (step.shouldUnpack) {
@@ -321,34 +313,34 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
 
                     // Mitigate Zip Slip vulnerability
                     for (const entry of zip.getEntries()) {
-                        const destPath = resolve(destDir, entry.entryName)
-                        resolveSafePath(destDir, destPath) // Throws if path traversal
+                        const destPath = resolve(stepTmpDir, entry.entryName)
+                        resolveSafePath(stepTmpDir, destPath) // Throws if path traversal
                     }
 
-                    zip.extractAllTo(destDir, true)
+                    zip.extractAllTo(stepTmpDir, true)
                 } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
                     tar.x({
                         file: localPath,
-                        cwd: destDir,
+                        cwd: stepTmpDir,
                         sync: true,
                         onentry: (entry) => {
-                            const destPath = join(destDir, entry.path)
-                            resolveSafePath(destDir, destPath) // Mitigate Tar Slip
+                            const destPath = join(stepTmpDir, entry.path)
+                            resolveSafePath(stepTmpDir, destPath) // Mitigate Tar Slip
                         }
                     })
                 } else {
                     throw new Error(`Unsupported archive format for unpacking: ${filename}`)
                 }
             } else {
-                copyFileSync(localPath, join(destDir, filename))
+                copyFileSync(localPath, join(stepTmpDir, filename))
             }
         }
 
-        // Apply filters directly to destDir
+        // Apply filters directly to stepTmpDir
         if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
             applyFilters(
-                destDir,
-                destDir,
+                stepTmpDir,
+                stepTmpDir,
                 step.ignorePatterns,
                 step.onlyPatterns,
             )
@@ -383,22 +375,22 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
             // Mitigate Zip Slip vulnerability
             for (const entry of zip.getEntries()) {
                 // AdmZip entryName can have bad characters. We simulate extraction destination:
-                const destPath = resolve(destDir, entry.entryName)
-                resolveSafePath(destDir, destPath) // Throws if path traversal
+                const destPath = resolve(stepTmpDir, entry.entryName)
+                resolveSafePath(stepTmpDir, destPath) // Throws if path traversal
             }
 
-            zip.extractAllTo(destDir, true)
+            zip.extractAllTo(stepTmpDir, true)
         } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
             // Need to manually wrap sync in async wrapper for proper bun compatibility,
             // or use callback structure, but sync is fine since we are in async method context.
             // Using extract synchronously.
             tar.x({
                 file: cachedFilePath,
-                cwd: destDir,
+                cwd: stepTmpDir,
                 sync: true,
                 onentry: (entry) => {
-                    const destPath = join(destDir, entry.path)
-                    resolveSafePath(destDir, destPath) // Mitigate Tar Slip
+                    const destPath = join(stepTmpDir, entry.path)
+                    resolveSafePath(stepTmpDir, destPath) // Mitigate Tar Slip
                 }
             })
         } else {
@@ -407,17 +399,17 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
             )
         }
 
-        // Apply filters directly to destDir (only when unpacking)
+        // Apply filters directly to stepTmpDir (only when unpacking)
         if (step.ignorePatterns.length > 0 || step.onlyPatterns.length > 0) {
             applyFilters(
-                destDir,
-                destDir,
+                stepTmpDir,
+                stepTmpDir,
                 step.ignorePatterns,
                 step.onlyPatterns,
             )
         }
     } else {
-        copyFileSync(cachedFilePath, join(destDir, filename))
+        copyFileSync(cachedFilePath, join(stepTmpDir, filename))
     }
 }
 
