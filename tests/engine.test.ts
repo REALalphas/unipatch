@@ -551,3 +551,43 @@ describe('Execution Engine', () => {
         await expect(pipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
     })
 })
+
+    test('Local Get: Folder with trailing slash copies contents', async () => {
+        const testDir = join(__dirname, 'test_trailing_slash')
+        mkdirSync(join(testDir, 'sub'), { recursive: true })
+        writeFileSync(join(testDir, 'file.txt'), 'content')
+        writeFileSync(join(testDir, 'sub/file2.txt'), 'content2')
+
+        try {
+            await pkg().put(get(`local:${testDir}/`)).execute()
+
+            expect(existsSync(join(OUT_DIR, 'file.txt'))).toBe(true)
+            expect(existsSync(join(OUT_DIR, 'sub', 'file2.txt'))).toBe(true)
+            // The folder itself shouldn't be created in OUT_DIR (except contents)
+            expect(existsSync(join(OUT_DIR, 'test_trailing_slash'))).toBe(false)
+        } finally {
+            if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true })
+        }
+    })
+
+    test('Local Get: Glob patterns copy matched files preserving structure', async () => {
+        const testDir = join(__dirname, 'test_glob')
+        mkdirSync(join(testDir, 'sub/nested'), { recursive: true })
+        writeFileSync(join(testDir, 'file.txt'), 'content')
+        writeFileSync(join(testDir, 'sub/file2.json'), 'content2')
+        writeFileSync(join(testDir, 'sub/nested/file3.txt'), 'content3')
+        writeFileSync(join(testDir, 'sub/nested/file4.json'), 'content4')
+
+        try {
+            // Should copy all .json files and preserve their directory structure relative to the glob base
+            await pkg().put(get(`local:${testDir}/**/*.json`)).execute()
+
+            expect(existsSync(join(OUT_DIR, 'sub', 'file2.json'))).toBe(true)
+            expect(existsSync(join(OUT_DIR, 'sub', 'nested', 'file4.json'))).toBe(true)
+
+            expect(existsSync(join(OUT_DIR, 'file.txt'))).toBe(false)
+            expect(existsSync(join(OUT_DIR, 'sub', 'nested', 'file3.txt'))).toBe(false)
+        } finally {
+            if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true })
+        }
+    })

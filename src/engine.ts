@@ -296,56 +296,117 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
     }
 
     if (step.url.startsWith('local:')) {
-        const localPathStr = step.url.replace('local:', '').trim()
-        if (!localPathStr) {
-            throw new Error(`Local path cannot be empty: ${step.url}`)
+        let localUrl = step.url.replace('local:', '')
+
+        // Handle trailing slash which indicates contents copy
+        const isTrailingSlash = localUrl.endsWith('/') || localUrl.endsWith('\\')
+        if (isTrailingSlash) {
+            localUrl = localUrl.slice(0, -1)
         }
 
-        const localPath = resolve(process.cwd(), localPathStr)
+        const isGlob = localUrl.includes('*') || localUrl.includes('?')
 
-        if (!existsSync(localPath)) {
-            throw new Error(`Local path not found: ${localPath}`)
-        }
+        if (isGlob) {
+            // Find base directory for glob pattern
+            // Assumes glob starts after the last exact directory part
+            const parts = localUrl.split(/[/\\]/)
+            let baseDir = process.cwd()
+            let i = 0
+            while (i < parts.length) {
+                const part = parts[i]
+                if (part === undefined || part.includes('*') || part.includes('?')) {
+                    break
+                }
+                // Ignore empty parts from starting slashes
+                if (part) {
+                    baseDir = resolve(baseDir, part)
+                } else if (i === 0 && (localUrl.startsWith('/') || localUrl.startsWith('\\'))) {
+                    baseDir = resolve('/')
+                }
+                i++
+            }
 
-        const stat = statSync(localPath)
-        const filename = localPath.split(/[/\\]/).pop() || 'local_file'
+            // Reconstruct glob relative to baseDir or just use getMatchedPaths which expects relative paths
+            // Actually, getMatchedPaths is designed to work with baseDir and pattern relative to baseDir.
+            // Wait, getMatchedPaths takes pattern and matches against relative paths to baseDir.
+            const patternParts = parts.slice(i)
+            const pattern = patternParts.join('/')
 
-        if (stat.isDirectory()) {
-            if (step.shouldUnpack) {
-                // If directory and unpack, copy contents directly to destDir
-                copyDirRecursive(localPath, destDir)
-            } else {
-                // Otherwise, copy directory itself into destDir
-                const targetDir = join(destDir, filename)
-                copyDirRecursive(localPath, targetDir)
+            if (!existsSync(baseDir)) {
+                throw new Error(`Local base path not found for glob: ${baseDir}`)
+            }
+
+            const matchedPaths = getMatchedPaths(baseDir, pattern)
+            if (matchedPaths.length === 0) {
+                throw new Error(`Local path not found: ${localUrl}`)
+            }
+
+            for (const matchedPath of matchedPaths) {
+                const stat = statSync(matchedPath)
+                const relativePath = relative(baseDir, matchedPath)
+
+                // If the user wants to keep directory structure from glob base:
+                // When copying glob like `folder/*`, we copy contents to destDir, so relativePath works.
+                const targetPath = join(destDir, relativePath)
+                const targetDirInfo = dirname(targetPath)
+
+                if (!existsSync(targetDirInfo)) {
+                    mkdirSync(targetDirInfo, { recursive: true })
+                }
+
+                if (stat.isDirectory()) {
+                    copyDirRecursive(matchedPath, targetPath)
+                } else {
+                    copyFileSync(matchedPath, targetPath)
+                }
             }
         } else {
-            if (step.shouldUnpack) {
-                if (filename.endsWith('.zip')) {
-                    const zip = new AdmZip(localPath)
+            const localPath = resolve(process.cwd(), localUrl)
 
-                    // Mitigate Zip Slip vulnerability
-                    for (const entry of zip.getEntries()) {
-                        const destPath = resolve(destDir, entry.entryName)
-                        resolveSafePath(destDir, destPath) // Throws if path traversal
-                    }
+            if (!existsSync(localPath)) {
+                throw new Error(`Local path not found: ${localPath}`)
+            }
 
-                    zip.extractAllTo(destDir, true)
-                } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
-                    tar.x({
-                        file: localPath,
-                        cwd: destDir,
-                        sync: true,
-                        onentry: (entry) => {
-                            const destPath = join(destDir, entry.path)
-                            resolveSafePath(destDir, destPath) // Mitigate Tar Slip
-                        }
-                    })
+            const stat = statSync(localPath)
+            const filename = localPath.split(/[/\\]/).pop() || 'local_file'
+
+            if (stat.isDirectory()) {
+                if (step.shouldUnpack || isTrailingSlash) {
+                    // If directory and unpack or trailing slash, copy contents directly to destDir
+                    copyDirRecursive(localPath, destDir)
                 } else {
-                    throw new Error(`Unsupported archive format for unpacking: ${filename}`)
+                    // Otherwise, copy directory itself into destDir
+                    const targetDir = join(destDir, filename)
+                    copyDirRecursive(localPath, targetDir)
                 }
             } else {
-                copyFileSync(localPath, join(destDir, filename))
+                if (step.shouldUnpack) {
+                    if (filename.endsWith('.zip')) {
+                        const zip = new AdmZip(localPath)
+
+                        // Mitigate Zip Slip vulnerability
+                        for (const entry of zip.getEntries()) {
+                            const destPath = resolve(destDir, entry.entryName)
+                            resolveSafePath(destDir, destPath) // Throws if path traversal
+                        }
+
+                        zip.extractAllTo(destDir, true)
+                    } else if (filename.endsWith('.tar.gz') || filename.endsWith('.tgz')) {
+                        tar.x({
+                            file: localPath,
+                            cwd: destDir,
+                            sync: true,
+                            onentry: (entry) => {
+                                const destPath = join(destDir, entry.path)
+                                resolveSafePath(destDir, destPath) // Mitigate Tar Slip
+                            }
+                        })
+                    } else {
+                        throw new Error(`Unsupported archive format for unpacking: ${filename}`)
+                    }
+                } else {
+                    copyFileSync(localPath, join(destDir, filename))
+                }
             }
         }
 
