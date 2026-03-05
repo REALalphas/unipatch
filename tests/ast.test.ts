@@ -6,6 +6,7 @@ import {
     remove,
     copy,
     move,
+    rename,
     pkg,
     GetNode,
     CreateNode,
@@ -13,6 +14,7 @@ import {
     RemoveNode,
     CopyNode,
     MoveNode,
+    RenameNode,
 } from '../src/ast'
 
 describe('AST & DSL', () => {
@@ -98,16 +100,27 @@ describe('AST & DSL', () => {
         expect(node.ignorePatterns).toEqual(['temp/*'])
     })
 
+    test('RenameNode works correctly', () => {
+        const node = rename('old_name.json', 'new_name.json', { overwrite: true })
+
+        expect(node).toBeInstanceOf(RenameNode)
+        expect(node.src).toBe('old_name.json')
+        expect(node.dest).toBe('new_name.json')
+        expect(node.options.overwrite).toBe(true)
+    })
+
     test('pkg context collects AST nodes', () => {
         const context = pkg().put(
             get('url').unpack(),
             edit('config.ini').set('a', 1),
             create('new.json'),
+            rename('old', 'new'),
         )
 
-        expect(context.steps.length).toBe(3)
+        expect(context.steps.length).toBe(4)
         expect(context.steps[0]!.type).toBe('Get')
         expect(context.steps[1]!.type).toBe('Edit')
         expect(context.steps[2]!.type).toBe('Create')
+        expect(context.steps[3]!.type).toBe('Rename')
     })
 })

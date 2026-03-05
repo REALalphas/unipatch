@@ -96,16 +96,22 @@ export class RemoveNode implements ASTNode {
     }
 }
 
+export interface FileOpOptions {
+    overwrite?: boolean
+}
+
 export class CopyNode implements ASTNode {
     type = 'Copy'
-    src: string
+    src: string | string[]
     dest: string
     ignorePatterns: string[] = []
     onlyPatterns: string[] = []
+    options: FileOpOptions
 
-    constructor(src: string, dest: string) {
+    constructor(src: string | string[], dest: string, options: FileOpOptions = {}) {
         this.src = src
         this.dest = dest
+        this.options = options
     }
 
     ignore(pattern: string): this {
@@ -121,14 +127,16 @@ export class CopyNode implements ASTNode {
 
 export class MoveNode implements ASTNode {
     type = 'Move'
-    src: string
+    src: string | string[]
     dest: string
     ignorePatterns: string[] = []
     onlyPatterns: string[] = []
+    options: FileOpOptions
 
-    constructor(src: string, dest: string) {
+    constructor(src: string | string[], dest: string, options: FileOpOptions = {}) {
         this.src = src
         this.dest = dest
+        this.options = options
     }
 
     ignore(pattern: string): this {
@@ -139,6 +147,19 @@ export class MoveNode implements ASTNode {
     only(pattern: string): this {
         this.onlyPatterns.push(pattern)
         return this
+    }
+}
+
+export class RenameNode implements ASTNode {
+    type = 'Rename'
+    src: string
+    dest: string
+    options: FileOpOptions
+
+    constructor(src: string, dest: string, options: FileOpOptions = {}) {
+        this.src = src
+        this.dest = dest
+        this.options = options
     }
 }
 
@@ -190,10 +211,14 @@ export function remove(path: string): RemoveNode {
     return new RemoveNode(path)
 }
 
-export function copy(src: string, dest: string): CopyNode {
-    return new CopyNode(src, dest)
+export function copy(src: string | string[], dest: string, options?: FileOpOptions): CopyNode {
+    return new CopyNode(src, dest, options)
 }
 
-export function move(src: string, dest: string): MoveNode {
-    return new MoveNode(src, dest)
+export function move(src: string | string[], dest: string, options?: FileOpOptions): MoveNode {
+    return new MoveNode(src, dest, options)
+}
+
+export function rename(src: string, dest: string, options?: FileOpOptions): RenameNode {
+    return new RenameNode(src, dest, options)
 }

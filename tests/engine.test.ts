@@ -5,10 +5,11 @@ import {
     rmSync,
     writeFileSync,
     mkdirSync,
+    statSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
-import { pkg, get, create, edit, remove, copy, move } from '../src/ast'
+import { pkg, get, create, edit, remove, copy, move, rename } from '../src/ast'
 import { OUT_DIR, TMP_DIR_BASE } from '../src/engine'
 import { clearAllCache } from '../src/cache'
 
@@ -126,6 +127,8 @@ describe('Execution Engine', () => {
         await pipeline.execute()
 
         expect(existsSync(join(OUT_DIR, 'docs', 'backup.txt'))).toBe(true)
+        // Verify it's a file, not a directory
+        expect(statSync(join(OUT_DIR, 'docs', 'backup.txt')).isFile()).toBe(true)
         expect(readFileSync(join(OUT_DIR, 'docs', 'backup.txt'), 'utf-8')).toBe(
             'hello',
         )
@@ -135,12 +138,93 @@ describe('Execution Engine', () => {
         expect(existsSync(join(OUT_DIR, 'docs', 'archive', 'readme.md'))).toBe(
             true,
         ) // Moved to new loc
+        expect(statSync(join(OUT_DIR, 'docs', 'archive', 'readme.md')).isFile()).toBe(true)
         expect(
             readFileSync(
                 join(OUT_DIR, 'docs', 'archive', 'readme.md'),
                 'utf-8',
             ),
         ).toBe('hello')
+    })
+
+    test('Array src and trailing slash works for copy/move', async () => {
+        const pipeline = pkg().put(
+            create('file1.txt', '1'),
+            create('file2.txt', '2'),
+            create('dir1/a.txt', 'a'),
+            copy(['file1.txt', 'file2.txt'], 'dest1'), // array implies destination is dir
+            move('dir1', 'dest2/'), // trailing slash implies destination is dir
+        )
+
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'dest1', 'file1.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'dest1', 'file2.txt'))).toBe(true)
+
+        expect(existsSync(join(OUT_DIR, 'dest2', 'dir1', 'a.txt'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'dir1'))).toBe(false)
+    })
+
+    test('Rename operations works for files and folders', async () => {
+        const pipeline = pkg().put(
+            create('old_name.txt', 'content'),
+            create('old_folder/data.txt', 'data'),
+            rename('old_name.txt', 'new_name.txt'),
+            rename('old_folder', 'new_folder'),
+        )
+
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'old_name.txt'))).toBe(false)
+        expect(existsSync(join(OUT_DIR, 'new_name.txt'))).toBe(true)
+        expect(readFileSync(join(OUT_DIR, 'new_name.txt'), 'utf-8')).toBe('content')
+
+        expect(existsSync(join(OUT_DIR, 'old_folder'))).toBe(false)
+        expect(existsSync(join(OUT_DIR, 'new_folder', 'data.txt'))).toBe(true)
+        expect(readFileSync(join(OUT_DIR, 'new_folder', 'data.txt'), 'utf-8')).toBe('data')
+    })
+
+    test('Rename and copy overwrite checks', async () => {
+        const pipeline1 = pkg().put(
+            create('src.txt', 'a'),
+            create('dest.txt', 'b'),
+            copy('src.txt', 'dest.txt')
+        )
+        await expect(pipeline1.execute()).rejects.toThrow('Destination file already exists and overwrite is false')
+
+        const pipeline2 = pkg().put(
+            create('src.txt', 'a'),
+            create('dest.txt', 'b'),
+            rename('src.txt', 'dest.txt')
+        )
+        await expect(pipeline2.execute()).rejects.toThrow('Destination already exists and overwrite is false')
+
+        // With overwrite true, it should succeed
+        const pipeline3 = pkg().put(
+            create('src.txt', 'a'),
+            create('dest.txt', 'b'),
+            copy('src.txt', 'dest.txt', { overwrite: true })
+        )
+        await pipeline3.execute()
+        expect(readFileSync(join(OUT_DIR, 'dest.txt'), 'utf-8')).toBe('a')
+    })
+
+    test('Rename multiple files throws error', async () => {
+        const pipeline = pkg().put(
+            create('file1.txt', '1'),
+            create('file2.txt', '2'),
+            rename('file*.txt', 'dest')
+        )
+        await expect(pipeline.execute()).rejects.toThrow('Multiple matches found')
+    })
+
+    test('Copy multiple files without trailing slash throws error', async () => {
+        const pipeline = pkg().put(
+            create('file1.txt', '1'),
+            create('file2.txt', '2'),
+            copy('file*.txt', 'dest') // no trailing slash
+        )
+        await expect(pipeline.execute()).rejects.toThrow('Cannot copy multiple files to a single file path without a trailing slash: dest')
     })
 
     test('Copy and Move directory operations with filters', async () => {
@@ -179,7 +263,7 @@ describe('Execution Engine', () => {
             create('delete_me_2.json', { a: 4 }),
             create('other.txt', 'hello'),
             edit('*.json').set('b', 3),
-            copy('file*.json', 'copied_jsons'),
+            copy('file*.json', 'copied_jsons/'), // Added trailing slash to indicate directory
             move('other.txt', 'moved_other.txt'),
             remove('delete_me_*.json')
         )
