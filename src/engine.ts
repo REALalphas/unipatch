@@ -296,7 +296,12 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
     }
 
     if (step.url.startsWith('local:')) {
-        const localPath = resolve(process.cwd(), step.url.replace('local:', ''))
+        const localPathStr = step.url.replace('local:', '').trim()
+        if (!localPathStr) {
+            throw new Error(`Local path cannot be empty: ${step.url}`)
+        }
+
+        const localPath = resolve(process.cwd(), localPathStr)
 
         if (!existsSync(localPath)) {
             throw new Error(`Local path not found: ${localPath}`)
