@@ -18,18 +18,10 @@ export class GetNode implements ASTNode {
     unpackOptions?: UnpackOptions
     ignorePatterns: string[] = []
     onlyPatterns: string[] = []
-    toFolder?: string
-    toOptions?: FileOpOptions
 
     constructor(url: string, options: ProviderOptions = {}) {
         this.url = url
         this.options = options
-    }
-
-    to(folder: string, options?: FileOpOptions): this {
-        this.toFolder = folder
-        this.toOptions = options
-        return this
     }
 
     unpack(options?: UnpackOptions): this {

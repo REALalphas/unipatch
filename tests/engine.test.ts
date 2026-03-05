@@ -512,34 +512,4 @@ describe('Execution Engine', () => {
             'hello world',
         )
     })
-
-    test('GetNode to folder option works', async () => {
-        const pipeline = pkg().put(
-            get('http://mock.com/mock.zip').to('remote_dest').unpack(),
-            get(`local:${LOCAL_MOCK_FILE}`).to('local_dest_file'),
-            get(`local:${LOCAL_MOCK_DIR}`).to('local_dest_dir').unpack(),
-        )
-
-        await pipeline.execute()
-
-        // Verify remote zip was unpacked into remote_dest
-        expect(existsSync(join(OUT_DIR, 'remote_dest', 'config.json'))).toBe(true)
-        expect(existsSync(join(OUT_DIR, 'remote_dest', 'data.txt'))).toBe(true)
-        // The mock zip does not have a top-level folder, so they should be directly inside remote_dest
-
-        // Verify local file was copied into local_dest_file
-        expect(existsSync(join(OUT_DIR, 'local_dest_file', 'local_mock.txt'))).toBe(true)
-
-        // Verify local dir was unpacked into local_dest_dir
-        expect(existsSync(join(OUT_DIR, 'local_dest_dir', 'file1.txt'))).toBe(true)
-        expect(existsSync(join(OUT_DIR, 'local_dest_dir', 'file2.txt'))).toBe(true)
-    })
-
-    test('GetNode to folder path traversal prevention', async () => {
-        const pipeline = pkg().put(
-            get('http://mock.com/mock.zip').to('../../etc/passwd').unpack(),
-        )
-
-        await expect(pipeline.execute()).rejects.toThrow(/Security Error: Path traversal detected/)
-    })
 })

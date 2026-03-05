@@ -23,15 +23,12 @@ describe('AST & DSL', () => {
             .unpack()
             .ignore('*.txt')
             .only('*.json')
-            .to('target_dir', { overwrite: true })
 
         expect(node).toBeInstanceOf(GetNode)
         expect(node.url).toBe('https://example.com/file.zip')
         expect(node.shouldUnpack).toBe(true)
         expect(node.ignorePatterns).toEqual(['*.txt'])
         expect(node.onlyPatterns).toEqual(['*.json'])
-        expect(node.toFolder).toBe('target_dir')
-        expect(node.toOptions?.overwrite).toBe(true)
     })
 
     test('CreateNode infers types correctly', () => {
