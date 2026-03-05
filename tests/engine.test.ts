@@ -479,6 +479,14 @@ describe('Execution Engine', () => {
         await expect(pipeline.execute()).rejects.toThrow('Local path not found')
     })
 
+    test('Local Get: Empty path', async () => {
+        const pipeline1 = pkg().put(get('local:'))
+        await expect(pipeline1.execute()).rejects.toThrow('Local path cannot be empty: local:')
+
+        const pipeline2 = pkg().put(get('local:   '))
+        await expect(pipeline2.execute()).rejects.toThrow('Local path cannot be empty: local:   ')
+    })
+
     test('Local Get: Unpacking a local zip file', async () => {
         const pipeline = pkg().put(get(`local:${MOCK_ZIP_PATH}`).unpack())
         await pipeline.execute()
