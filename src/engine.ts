@@ -15,6 +15,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
 import * as tar from 'tar'
+import SevenZip from '7z-wasm'
 import { minimatch } from 'minimatch'
 
 import {
@@ -419,6 +420,24 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                                 resolveSafePath(destDir, destPath) // Mitigate Tar Slip
                             }
                         })
+                    } else if (filename.endsWith('.7z')) {
+                        const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
+                        const mountRoot = '/nodefs'
+                        sevenZip.FS.mkdir(mountRoot)
+                        sevenZip.FS.mount(sevenZip.NODEFS, { root: '/' }, mountRoot)
+
+                        const cwdPosix = process.cwd().replace(/\\/g, '/')
+                        sevenZip.FS.chdir(mountRoot + cwdPosix)
+
+                        const localPathResolved = resolve(process.cwd(), localPath).replace(/\\/g, '/')
+                        const destDirResolved = resolve(process.cwd(), destDir).replace(/\\/g, '/')
+
+                        // 7z-wasm extracts directly using the underlying 7z system,
+                        // so path traversals native to the archive are stripped natively.
+                        const exitCode = sevenZip.callMain(['x', mountRoot + localPathResolved, '-o' + mountRoot + destDirResolved, '-y'])
+                        if (exitCode !== 0) {
+                            throw new Error(`Failed to extract ${filename} (exit code ${exitCode})`)
+                        }
                     } else {
                         throw new Error(`Unsupported archive format for unpacking: ${filename}`)
                     }
@@ -485,6 +504,24 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                     resolveSafePath(destDir, destPath) // Mitigate Tar Slip
                 }
             })
+        } else if (filename.endsWith('.7z')) {
+            const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
+            const mountRoot = '/nodefs'
+            sevenZip.FS.mkdir(mountRoot)
+            sevenZip.FS.mount(sevenZip.NODEFS, { root: '/' }, mountRoot)
+
+            const cwdPosix = process.cwd().replace(/\\/g, '/')
+            sevenZip.FS.chdir(mountRoot + cwdPosix)
+
+            const cachedPathResolved = resolve(process.cwd(), cachedFilePath).replace(/\\/g, '/')
+            const destDirResolved = resolve(process.cwd(), destDir).replace(/\\/g, '/')
+
+            // 7z-wasm extracts directly using the underlying 7z system,
+            // so path traversals native to the archive are stripped natively.
+            const exitCode = sevenZip.callMain(['x', mountRoot + cachedPathResolved, '-o' + mountRoot + destDirResolved, '-y'])
+            if (exitCode !== 0) {
+                throw new Error(`Failed to extract ${filename} (exit code ${exitCode})`)
+            }
         } else {
             throw new Error(
                 `Unsupported archive format for unpacking: ${filename}`,
