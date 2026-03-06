@@ -11,6 +11,7 @@ import {
     createWriteStream,
 } from 'node:fs'
 import { join, dirname, resolve, relative, isAbsolute, basename } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
@@ -421,7 +422,14 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                             }
                         })
                     } else if (filename.endsWith('.7z')) {
-                        const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
+                        const sevenZip = await SevenZip({
+                            print: () => {},
+                            printErr: () => {},
+                            locateFile: (file: string) =>
+                                file === '7zz.wasm'
+                                    ? fileURLToPath(import.meta.resolve('7z-wasm/7zz.wasm'))
+                                    : file
+                        })
 
                         const sourceDir = dirname(resolve(process.cwd(), localPath))
                         const targetDir = resolve(process.cwd(), destDir)
@@ -507,7 +515,14 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                 }
             })
         } else if (filename.endsWith('.7z')) {
-            const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
+            const sevenZip = await SevenZip({
+                print: () => {},
+                printErr: () => {},
+                locateFile: (file: string) =>
+                    file === '7zz.wasm'
+                        ? fileURLToPath(import.meta.resolve('7z-wasm/7zz.wasm'))
+                        : file
+            })
 
             const sourceDir = dirname(resolve(process.cwd(), cachedFilePath))
             const targetDir = resolve(process.cwd(), destDir)
