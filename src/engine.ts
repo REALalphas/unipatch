@@ -10,7 +10,7 @@ import {
     copyFileSync,
     createWriteStream,
 } from 'node:fs'
-import { join, dirname, resolve, relative, isAbsolute } from 'node:path'
+import { join, dirname, resolve, relative, isAbsolute, basename } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
@@ -422,19 +422,21 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
                         })
                     } else if (filename.endsWith('.7z')) {
                         const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
-                        const mountRoot = '/nodefs'
-                        sevenZip.FS.mkdir(mountRoot)
-                        sevenZip.FS.mount(sevenZip.NODEFS, { root: '/' }, mountRoot)
 
-                        const cwdPosix = process.cwd().replace(/\\/g, '/')
-                        sevenZip.FS.chdir(mountRoot + cwdPosix)
+                        const sourceDir = dirname(resolve(process.cwd(), localPath))
+                        const targetDir = resolve(process.cwd(), destDir)
 
-                        const localPathResolved = resolve(process.cwd(), localPath).replace(/\\/g, '/')
-                        const destDirResolved = resolve(process.cwd(), destDir).replace(/\\/g, '/')
+                        sevenZip.FS.mkdir('/source')
+                        sevenZip.FS.mkdir('/dest')
+                        sevenZip.FS.mount(sevenZip.NODEFS, { root: sourceDir }, '/source')
+                        sevenZip.FS.mount(sevenZip.NODEFS, { root: targetDir }, '/dest')
+
+                        sevenZip.FS.chdir('/dest')
 
                         // 7z-wasm extracts directly using the underlying 7z system,
                         // so path traversals native to the archive are stripped natively.
-                        const exitCode = sevenZip.callMain(['x', mountRoot + localPathResolved, '-o' + mountRoot + destDirResolved, '-y'])
+                        const actualBasename = basename(localPath)
+                        const exitCode = sevenZip.callMain(['x', `/source/${actualBasename}`, '-o/dest', '-y']) as unknown as number
                         if (exitCode !== 0) {
                             throw new Error(`Failed to extract ${filename} (exit code ${exitCode})`)
                         }
@@ -506,19 +508,21 @@ async function executeGet(step: GetNode, stepTmpDir: string): Promise<void> {
             })
         } else if (filename.endsWith('.7z')) {
             const sevenZip = await SevenZip({ print: () => {}, printErr: () => {} })
-            const mountRoot = '/nodefs'
-            sevenZip.FS.mkdir(mountRoot)
-            sevenZip.FS.mount(sevenZip.NODEFS, { root: '/' }, mountRoot)
 
-            const cwdPosix = process.cwd().replace(/\\/g, '/')
-            sevenZip.FS.chdir(mountRoot + cwdPosix)
+            const sourceDir = dirname(resolve(process.cwd(), cachedFilePath))
+            const targetDir = resolve(process.cwd(), destDir)
 
-            const cachedPathResolved = resolve(process.cwd(), cachedFilePath).replace(/\\/g, '/')
-            const destDirResolved = resolve(process.cwd(), destDir).replace(/\\/g, '/')
+            sevenZip.FS.mkdir('/source')
+            sevenZip.FS.mkdir('/dest')
+            sevenZip.FS.mount(sevenZip.NODEFS, { root: sourceDir }, '/source')
+            sevenZip.FS.mount(sevenZip.NODEFS, { root: targetDir }, '/dest')
+
+            sevenZip.FS.chdir('/dest')
 
             // 7z-wasm extracts directly using the underlying 7z system,
             // so path traversals native to the archive are stripped natively.
-            const exitCode = sevenZip.callMain(['x', mountRoot + cachedPathResolved, '-o' + mountRoot + destDirResolved, '-y'])
+            const actualBasename = basename(cachedFilePath)
+            const exitCode = sevenZip.callMain(['x', `/source/${actualBasename}`, '-o/dest', '-y']) as unknown as number
             if (exitCode !== 0) {
                 throw new Error(`Failed to extract ${filename} (exit code ${exitCode})`)
             }

@@ -13,12 +13,17 @@ import { pkg, get, create, edit, remove, copy, move, rename } from '../src/ast'
 import { OUT_DIR, TMP_DIR_BASE } from '../src/engine'
 import { clearAllCache } from '../src/cache'
 
-const MOCK_ZIP_PATH = join(__dirname, 'mock.zip')
-const MOCK_MALICIOUS_ZIP_PATH = join(__dirname, 'malicious.zip')
-const LOCAL_MOCK_DIR = join(__dirname, 'local_mock_dir')
-const LOCAL_MOCK_FILE = join(__dirname, 'local_mock.txt')
+const MOCK_DIR = join(__dirname, 'mock')
+const MOCK_ZIP_PATH = join(MOCK_DIR, 'mock.zip')
+const MOCK_MALICIOUS_ZIP_PATH = join(MOCK_DIR, 'malicious.zip')
+const LOCAL_MOCK_DIR = join(MOCK_DIR, 'local_mock_dir')
+const LOCAL_MOCK_FILE = join(MOCK_DIR, 'local_mock.txt')
+const MOCK_7Z_PATH = join(MOCK_DIR, 'mock.7z')
 
 function createMockZip() {
+    if (!existsSync(MOCK_DIR)) {
+        mkdirSync(MOCK_DIR, { recursive: true })
+    }
     const zip = new AdmZip()
     zip.addFile('config.json', Buffer.from('{"version": 1}', 'utf8'))
     zip.addFile('data.txt', Buffer.from('hello world', 'utf8'))
@@ -496,12 +501,30 @@ describe('Execution Engine', () => {
     })
 
     test('Local Get: Unpacking a local 7z file', async () => {
-        const mock7zPath = join(__dirname, 'mock.7z')
-        const pipeline = pkg().put(get(`local:${mock7zPath}`).unpack())
+        const pipeline = pkg().put(get(`local:${MOCK_7Z_PATH}`).unpack())
         await pipeline.execute()
 
         expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
         expect(existsSync(join(OUT_DIR, 'data.txt'))).toBe(true)
+    })
+
+    test('Local Get: Unpacking a local 7z file outside of CWD', async () => {
+        const os = require('os')
+        const { copyFileSync } = require('fs')
+
+        // Copy the mock.7z to the system's temporary directory (outside process.cwd())
+        const externalMockPath = join(os.tmpdir(), 'external_mock.7z')
+        copyFileSync(MOCK_7Z_PATH, externalMockPath)
+
+        const pipeline = pkg().put(get(`local:${externalMockPath}`).unpack())
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'data.txt'))).toBe(true)
+
+        if (existsSync(externalMockPath)) {
+            rmSync(externalMockPath)
+        }
     })
 
     test('Unpack overwrite options', async () => {
