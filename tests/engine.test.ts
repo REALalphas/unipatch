@@ -33,7 +33,7 @@ function createMockZip() {
 }
 
 describe('Execution Engine', () => {
-    beforeAll(() => {
+    beforeAll(async () => {
         clearAllCache()
         createMockZip()
 
@@ -489,6 +489,15 @@ describe('Execution Engine', () => {
 
     test('Local Get: Unpacking a local zip file', async () => {
         const pipeline = pkg().put(get(`local:${MOCK_ZIP_PATH}`).unpack())
+        await pipeline.execute()
+
+        expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
+        expect(existsSync(join(OUT_DIR, 'data.txt'))).toBe(true)
+    })
+
+    test('Local Get: Unpacking a local 7z file', async () => {
+        const mock7zPath = join(__dirname, 'mock.7z')
+        const pipeline = pkg().put(get(`local:${mock7zPath}`).unpack())
         await pipeline.execute()
 
         expect(existsSync(join(OUT_DIR, 'config.json'))).toBe(true)
