@@ -5,13 +5,14 @@ Constructs a `MoveNode` representing the relocation of a file or directory tree 
 
 ## Syntax
 ```typescript
-move( src, dest )
+move( src, dest, [options] )
 ```
 
 ## Arguments
 
-1. `src` (`string`) - The path of the folder or file to relocate.
+1. `src` (`string | string[]`) - The path or paths of the folder or file to relocate.
 2. `dest` (`string`) - The output destination of the relocated source content.
+3. `options` (`FileOpOptions` optional) - An object containing a property like `{ overwrite: boolean }`. By default, moving operations throw an error when attempting to overwrite existing files, unless `{ overwrite: true }` is provided.
 
 ## Returns
 `MoveNode` - An AST instruction object permitting chained filtering directives with `.only()` and `.ignore()`.
@@ -47,4 +48,5 @@ const engine = pkg().put(
 ## See Also
 * [MoveNode](MoveNode.md)
 * [Global.copy](Global.copy.md)
+* [Global.rename](Global.rename.md)
 * [Global.remove](Global.remove.md)

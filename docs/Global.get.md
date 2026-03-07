@@ -1,7 +1,7 @@
 # Global.get
 
 ## Description
-Creates a `GetNode` AST instruction. This function signals the deployment engine to fetch an artifact from a specified URL, or from GitHub and GitLab repositories using the designated provider syntax.
+Creates a `GetNode` AST instruction. This function signals the deployment engine to fetch an artifact from a specified URL, or from GitHub and GitLab repositories using the designated provider syntax. It also supports fetching local resources via a `local:` prefix.
 
 ## Syntax
 ```typescript
@@ -10,7 +10,7 @@ get( url, [options] )
 
 ## Arguments
 
-1. `url` (`string`) - The location of the resource to acquire. Can be a direct web URL (`https://...`), or utilize provider syntax such as `github:user/repo`, `gitlab:user/repo`, or simply `user/repo` (which defaults to GitHub).
+1. `url` (`string`) - The location of the resource to acquire. Can be a direct web URL (`https://...`), utilize provider syntax such as `github:user/repo`, `gitlab:user/repo`, or simply `user/repo` (which defaults to GitHub). Local resources can be fetched with the `local:` prefix (e.g., `local:folder/` or `local:*.json`). Local paths cannot be empty. Trailing slashes indicate fetching directory contents rather than the directory itself.
 2. `options` (`ProviderOptions` optional) - An object representing query properties for a remote repository provider.
 
 ### ProviderOptions properties
@@ -50,6 +50,20 @@ const pipeline = pkg().put(
 );
 ```
 
+### Fetching Local Resources
+Acquires resources from the local file system. Appending a trailing slash copies the directory contents instead of the directory itself. Minimatch glob patterns are supported to selectively copy files.
+
+```typescript
+import { pkg, get } from 'unipatch-engine';
+
+const deployment = pkg().put(
+    get('local:source_folder/'),
+    get('local:configs/*.json')
+);
+```
+
 ## See Also
 * [GetNode](GetNode.md)
 * [Global.pkg](Global.pkg.md)
+* [Global.copy](Global.copy.md)
+* [Global.move](Global.move.md)
