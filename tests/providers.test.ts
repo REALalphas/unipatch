@@ -1,5 +1,7 @@
 import { expect, test, describe, mock, afterEach } from 'bun:test'
-import { getProvider, GitHubProvider, GitLabProvider } from '../src/providers'
+import { getProvider, GitHubProvider, GitLabProvider, LineageOSProvider } from '../src/providers'
+import * as path from 'node:path'
+import * as fs from 'node:fs'
 
 describe('Providers', () => {
     // Save original fetch
@@ -28,6 +30,14 @@ describe('Providers', () => {
         const gl = getProvider('gitlab:user/repo')
         expect(gl).toBeInstanceOf(GitLabProvider)
         expect((gl as any).repo).toBe('user/repo')
+
+        const lineage = getProvider('lineageos:nx_tab')
+        expect(lineage).toBeInstanceOf(LineageOSProvider)
+        expect((lineage as any).repo).toBe('nx_tab')
+
+        const lineageDirect = getProvider('https://download.lineageos.org/api/v2/devices/nx_tab/builds')
+        expect(lineageDirect).toBeInstanceOf(LineageOSProvider)
+        expect((lineageDirect as any).repo).toBe('nx_tab')
     })
 
     test('GitHubProvider resolves asset correctly (latest, no pattern)', async () => {
@@ -129,6 +139,62 @@ describe('Providers', () => {
         expect(asset.url).toBe(
             'https://gitlab.com/test/repo/-/releases/v1.0.0/downloads/release.tar.gz',
         )
+    })
+
+
+    test('LineageOSProvider resolves asset correctly (latest, no pattern)', async () => {
+        const lineage = new LineageOSProvider('nx_tab')
+        const mockData = JSON.parse(fs.readFileSync(path.join(__dirname, 'mock/lineageos_builds.json'), 'utf-8'))
+
+        global.fetch = mock((_url: string | URL | Request, _options?: RequestInit) => {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(mockData),
+            }) as Promise<Response>
+        }) as any
+
+        const asset = await lineage.resolveAsset({ version: 'latest' })
+        expect(asset.filename).toBe('lineage-22.2-20260301-nightly-nx_tab-signed.zip')
+        expect(asset.url).toBe('https://mirrorbits.lineageos.org/full/nx_tab/20260301/lineage-22.2-20260301-nightly-nx_tab-signed.zip')
+    })
+
+    test('LineageOSProvider filters by assetPattern', async () => {
+        const lineage = new LineageOSProvider('nx_tab')
+        const mockData = JSON.parse(fs.readFileSync(path.join(__dirname, 'mock/lineageos_builds.json'), 'utf-8'))
+
+        global.fetch = mock((_url: string | URL | Request, _options?: RequestInit) => {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(mockData),
+            }) as Promise<Response>
+        }) as any
+
+        const asset = await lineage.resolveAsset({ assetPattern: 'boot.img' })
+        expect(asset.filename).toBe('boot.img')
+        expect(asset.url).toBe('https://mirrorbits.lineageos.org/full/nx_tab/20260301/boot.img')
+    })
+
+    test('LineageOSProvider uses cached releases to avoid redundant API calls', async () => {
+        const lineage = new LineageOSProvider('nx_tab-cache')
+        const mockData = JSON.parse(fs.readFileSync(path.join(__dirname, 'mock/lineageos_builds.json'), 'utf-8'))
+
+        let fetchCount = 0
+
+        global.fetch = mock((_url: string | URL | Request, _options?: RequestInit) => {
+            fetchCount++
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(mockData),
+            }) as Promise<Response>
+        }) as any
+
+        // First call should trigger fetch
+        await lineage.resolveAsset({ version: 'latest' })
+        expect(fetchCount).toBe(1)
+
+        // Second call should use cache
+        await lineage.resolveAsset({ version: 'latest' })
+        expect(fetchCount).toBe(1) // Should remain 1
     })
 
     test('GitHubProvider uses cached releases to avoid redundant API calls', async () => {

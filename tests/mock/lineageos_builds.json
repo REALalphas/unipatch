@@ -1,0 +1,39 @@
+[
+  {
+    "date": "2026-03-01",
+    "datetime": 1772323360,
+    "files": [
+      {
+        "date": "2026-03-01",
+        "datetime": 1772323360,
+        "filename": "lineage-22.2-20260301-nightly-nx_tab-signed.zip",
+        "filepath": "/full/nx_tab/20260301/lineage-22.2-20260301-nightly-nx_tab-signed.zip",
+        "os_patch_level": "2026-02-01",
+        "sha1": "4fa082414a81b22154f458a3f19766a9a24c0d77",
+        "sha256": "3f174f7b3fce6367da3951944bbb8436112bd4a257d7abc46dae1bc1ff531d77",
+        "size": 946753407,
+        "type": "nightly",
+        "url": "https://mirrorbits.lineageos.org/full/nx_tab/20260301/lineage-22.2-20260301-nightly-nx_tab-signed.zip"
+      },
+      {
+        "filename": "boot.img",
+        "filepath": "/full/nx_tab/20260301/boot.img",
+        "sha1": "ed98e5068e0d8e488fe254e202943a13b752dd1b",
+        "sha256": "c1cf10f76b03787be0bfe57ea150c085e30f07b514902c827f9adf2112857c66",
+        "size": 14211072,
+        "url": "https://mirrorbits.lineageos.org/full/nx_tab/20260301/boot.img"
+      },
+      {
+        "filename": "recovery.img",
+        "filepath": "/full/nx_tab/20260301/recovery.img",
+        "sha1": "975f0226cec5069818892edae14b317fdbe3dbe4",
+        "sha256": "aa1a58e274ae4f3f28f2dfb9fcaec1ea6328a218a90680b3ada5af2fdbd516b6",
+        "size": 26351616,
+        "url": "https://mirrorbits.lineageos.org/full/nx_tab/20260301/recovery.img"
+      }
+    ],
+    "os_patch_level": "2026-02-01",
+    "type": "nightly",
+    "version": "22.2"
+  }
+]
