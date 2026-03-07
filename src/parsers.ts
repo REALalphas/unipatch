@@ -65,6 +65,9 @@ function modifyIniString(
 
         if (parts.length > 1 && parts[0]) {
             targetSection = parts[0]
+            if (targetSection.startsWith('[') && targetSection.endsWith(']')) {
+                targetSection = targetSection.slice(1, -1)
+            }
             targetKey = parts.slice(1).join('.')
         }
 
@@ -76,7 +79,7 @@ function modifyIniString(
             let line = lines[i]?.trim()
 
             // Check for section header
-            const sectionMatch = line?.match(/^\[(.*)\]$/)
+            const sectionMatch = line?.match(/^\[(.*?)\](?:\s*[;#].*)?$/)
             if (sectionMatch && sectionMatch[1]) {
                 currentSection = sectionMatch[1]
                 if (currentSection === targetSection) {
@@ -121,7 +124,7 @@ function modifyIniString(
                 let insertAt = 0
                 while (
                     insertAt < lines.length &&
-                    !lines[insertAt]?.trim().match(/^\[(.*)\]$/)
+                    !lines[insertAt]?.trim().match(/^\[(.*?)\](?:\s*[;#].*)?$/)
                 ) {
                     insertAt++
                 }
@@ -211,7 +214,21 @@ export function modifyContent(
     clearComments: boolean = false,
 ): string {
     if (format === 'ini') {
-        return modifyIniString(content, modifications, clearComments)
+        // Pre-process modifications to expand object values into dot-notation keys
+        const expandedMods: { key: string; value: any }[] = []
+        for (const mod of modifications) {
+            if (mod.value !== null && typeof mod.value === 'object' && !Array.isArray(mod.value)) {
+                for (const [k, v] of Object.entries(mod.value)) {
+                    expandedMods.push({ key: `${mod.key}.${k}`, value: v })
+                }
+            } else if (Array.isArray(mod.value)) {
+                // If it's an array, join it by comma for INI
+                expandedMods.push({ key: mod.key, value: mod.value.join(',') })
+            } else {
+                expandedMods.push(mod)
+            }
+        }
+        return modifyIniString(content, expandedMods, clearComments)
     }
 
     const parser = parsers[format]
