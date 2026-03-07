@@ -55,3 +55,4 @@ const engine = pkg().put(
 ## See Also
 * [Global.move](Global.move.md)
 * [CopyNode](CopyNode.md)
+* [RenameNode](RenameNode.md)

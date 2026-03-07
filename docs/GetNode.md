@@ -5,16 +5,33 @@ This class defines the `Get` AST node instruction, which is returned by the `get
 
 ## Methods
 
+### GetNode.to
+Directs the retrieved artifact or unpacked archive contents into a specific sub-directory within the output build path.
+
+#### Syntax
+```typescript
+to( folder, [options] )
+```
+
+#### Arguments
+1. `folder` (`string`) - The target sub-directory to place the artifact or unpacked contents.
+2. `options` (`FileOpOptions` optional) - An object representing file operation properties, such as `{ overwrite: boolean }`.
+
+#### Returns
+`GetNode` - The object instance allowing chainable modifications.
+
+---
+
 ### GetNode.unpack
 Instructs the download node to unpack and extract its archive directly into the current sequence's root folder environment.
 
 #### Syntax
 ```typescript
-unpack()
+unpack( [options] )
 ```
 
 #### Arguments
-This function does not take any arguments.
+1. `options` (`UnpackOptions` optional) - An object providing configurations for the unpacking process. By default, unpacked files unconditionally overwrite existing files. Passing `{ overwrite: false }` enforces a pre-check that throws an error if file conflicts exist.
 
 #### Returns
 `GetNode` - The object instance allowing chainable modifications.

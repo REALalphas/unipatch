@@ -55,3 +55,4 @@ const deployment = pkg().put(
 ## See Also
 * [Global.copy](Global.copy.md)
 * [MoveNode](MoveNode.md)
+* [RenameNode](RenameNode.md)

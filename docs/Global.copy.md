@@ -5,13 +5,14 @@ Generates a `CopyNode` instruction that creates duplicates of targeted files or 
 
 ## Syntax
 ```typescript
-copy( src, dest )
+copy( src, dest, [options] )
 ```
 
 ## Arguments
 
-1. `src` (`string`) - The path of the folder or file to duplicate.
+1. `src` (`string | string[]`) - The path or paths of the folder or file to duplicate.
 2. `dest` (`string`) - The destination path for the copy operation.
+3. `options` (`FileOpOptions` optional) - An object containing a property like `{ overwrite: boolean }`. By default, copy operations will throw an error when attempting to overwrite existing files, unless `{ overwrite: true }` is provided.
 
 ## Returns
 `CopyNode` - The respective node indicating this AST instruction. It offers chainable helper tools like `.ignore()` and `.only()`.
@@ -48,4 +49,5 @@ const deployment = pkg().put(
 ## See Also
 * [CopyNode](CopyNode.md)
 * [Global.move](Global.move.md)
+* [Global.rename](Global.rename.md)
 * [Global.remove](Global.remove.md)
