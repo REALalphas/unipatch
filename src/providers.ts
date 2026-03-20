@@ -267,17 +267,114 @@ export class GitLabProvider extends GitProvider {
 /**
  * Factory function to get the appropriate provider.
  */
+
+
+/**
+ * A provider implementation for resolving and fetching artifacts from LineageOS builds.
+ */
+export class LineageOSProvider extends GitProvider {
+    /**
+     * Resolves the best matching asset URL and filename from LineageOS builds based on options.
+     * @param options Configuration for release filtering and fetching.
+     * @returns A promise resolving to the final URL and filename of the requested artifact.
+     */
+    async resolveAsset(options: ProviderOptions): Promise<ResolvedAsset> {
+        const {
+            version = 'latest',
+            assetPattern,
+            headers = {},
+        } = options
+
+        const apiUrl = `https://download.lineageos.org/api/v2/devices/${this.repo}/builds`
+        const fetchOptions = {
+            headers: {
+                'User-Agent': 'Unipatch-Engine',
+                ...headers,
+            },
+        }
+
+        let builds: any[] | null = getCachedProviderData('lineageos', this.repo, 60 * 60 * 1000)
+
+        if (!builds) {
+            const response = await fetch(apiUrl, fetchOptions)
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch LineageOS builds for ${this.repo}: ${response.statusText}`,
+                )
+            }
+
+            builds = (await response.json()) as any[]
+            setCachedProviderData('lineageos', this.repo, builds)
+        }
+
+        if (builds.length === 0) {
+            throw new Error(`No valid builds found for ${this.repo}`)
+        }
+
+        // Find the matching build
+        let targetBuild
+        if (version === 'latest') {
+            targetBuild = builds[0] // API returns sorted by date
+        } else {
+            targetBuild = builds.find((b) => b.version === version)
+
+            if (!targetBuild) {
+                throw new Error(
+                    `No build matching version ${version} found for ${this.repo}`,
+                )
+            }
+        }
+
+        if (!targetBuild.files || targetBuild.files.length === 0) {
+            throw new Error(
+                `No files found in build ${targetBuild.version} (${targetBuild.date}) for ${this.repo}`,
+            )
+        }
+
+        // Find the matching asset
+        let targetAsset
+        if (assetPattern) {
+            targetAsset = targetBuild.files.find((f: any) =>
+                this.matchAsset(f.filename, assetPattern),
+            )
+        } else {
+            // Default to the main zip if no pattern provided (type: nightly, usually ends with .zip)
+            targetAsset = targetBuild.files.find((f: any) => f.filename.endsWith('.zip')) || targetBuild.files[0]
+        }
+
+        if (!targetAsset) {
+            throw new Error(
+                `No matching asset found in build ${targetBuild.version} (${targetBuild.date}) for ${this.repo}`,
+            )
+        }
+
+        return {
+            url: targetAsset.url,
+            filename: targetAsset.filename,
+        }
+    }
+}
+
 export function getProvider(url: string): GitProvider | null {
+    // Intercept direct lineageos API URLs and redirect to lineageos provider
+    const lineageMatch = url.match(/^https:\/\/download\.lineageos\.org\/api\/v2\/devices\/([^\/]+)\/builds$/)
+    if (lineageMatch) {
+        return new LineageOSProvider(lineageMatch[1])
+    }
+
     // If it's a direct URL, no provider needed (handled separately)
     if (url.startsWith('http://') || url.startsWith('https://')) {
         return null
     }
 
-    // Support formats: github:user/repo, gitlab:user/repo, or just user/repo (defaults to github)
+    // Support formats: github:user/repo, gitlab:user/repo, lineageos:device, or just user/repo (defaults to github)
     let providerType = 'github'
     let repoPath = url
 
-    if (url.startsWith('github:')) {
+    if (url.startsWith('lineageos:')) {
+        providerType = 'lineageos'
+        repoPath = url.replace('lineageos:', '')
+    } else if (url.startsWith('github:')) {
         providerType = 'github'
         repoPath = url.replace('github:', '')
     } else if (url.startsWith('gitlab:')) {
@@ -291,7 +388,9 @@ export function getProvider(url: string): GitProvider | null {
         return null // Not a valid provider format
     }
 
-    if (providerType === 'github') {
+    if (providerType === 'lineageos') {
+        return new LineageOSProvider(repoPath)
+    } else if (providerType === 'github') {
         return new GitHubProvider(repoPath)
     } else if (providerType === 'gitlab') {
         return new GitLabProvider(repoPath)
