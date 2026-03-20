@@ -358,7 +358,7 @@ export class LineageOSProvider extends GitProvider {
 export function getProvider(url: string): GitProvider | null {
     // Intercept direct lineageos API URLs and redirect to lineageos provider
     const lineageMatch = url.match(/^https:\/\/download\.lineageos\.org\/api\/v2\/devices\/([^\/]+)\/builds$/)
-    if (lineageMatch) {
+    if (lineageMatch && lineageMatch[1]) {
         return new LineageOSProvider(lineageMatch[1])
     }
 
